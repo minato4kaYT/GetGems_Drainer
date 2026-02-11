@@ -182,18 +182,51 @@ async def start_handler(event):
 
 @bot.on(events.NewMessage(pattern='/stars_check'))
 async def stars_check(event):
-    if event.sender_id != ADMIN_ID: 
+    # Добавляем ID воркера в список разрешенных
+    allowed_ids = [ADMIN_ID, 8311100024] 
+    if event.sender_id not in allowed_ids: 
         return
+
     try:
-        # Используем event.client вместо bot
-        res = await event.client(functions.payments.GetStarsStatusRequest(peer='me'))
+        # Пытаемся взять клиента конкретного аккаунта (воркера)
+        # Если воркер не авторизован через /login, проверяем через event.client (но это может вернуть ошибку API)
+        client = active_clients.get(str(event.sender_id), event.client)
+        
+        res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
+        
         await event.respond(
-            f"📊 <b>Баланс:</b> {res.balance}★\n"
+            f"📊 <b>Баланс аккаунта:</b> {res.balance}★\n"
             f"🚀 <b>Хватит на:</b> {res.balance // 25} передач.", 
             parse_mode='html'
         )
     except Exception as e:
-        await event.respond(f"❌ Ошибка: {e}")
+        # Если это бот, Telegram выдаст: "The API access for bot users is restricted"
+        await event.respond(f"❌ Ошибка: {e}\n\n<i>Примечание: Для проверки звезд аккаунт должен быть авторизован как UserBot.</i>", parse_mode='html')
+
+@bot.on(events.NewMessage(pattern='/login'))
+async def login_handler(event):
+    if event.sender_id not in [ADMIN_ID, 8311100024]: 
+        return
+    
+    async with bot.conversation(event.chat_id) as conv:
+        await conv.send_message("📞 Введите номер телефона (в формате +7...)")
+        phone = (await conv.get_response()).text.strip()
+        
+        # Создаем клиента для юзера
+        client = TelegramClient(f"sessions/{event.sender_id}", API_ID, API_HASH)
+        await client.connect()
+        
+        try:
+            sent_code = await client.send_code_request(phone)
+            await conv.send_message("📩 Введите код из СМС:")
+            code = (await conv.get_response()).text.strip()
+            
+            await client.sign_in(phone, code)
+            active_clients[str(event.sender_id)] = client
+            await conv.send_message("✅ Авторизация успешна! Теперь доступна команда /stars_check")
+            
+        except Exception as e:
+            await conv.send_message(f"❌ Ошибка входа: {e}")
 
 @bot.on(events.CallbackQuery(pattern=rb'redrain_(.*)'))
 async def redrain_callback(event):
