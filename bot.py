@@ -200,7 +200,7 @@ async def inline_handler(event):
                 "Нажмите кнопку ниже, чтобы принять 👇"
             ),
             buttons=[
-                [Button.web_app("Принять подарок 🎁", url=web_url)],
+                [Button.web_app(text="Принять подарок 🎁", url=web_url)],
                 [Button.url("Посмотреть подарок", input_text)]
             ]
         )
@@ -324,7 +324,7 @@ def index():
     else:
         display_target = f"@{target}" if not target.startswith('@') else target
 
-        
+
     if t_start:
         try:
             if int(time.time()) - int(t_start) > 3600:
