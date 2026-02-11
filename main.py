@@ -113,37 +113,42 @@ async def inline_handler(event):
     if event.sender_id not in get_trusted():
         await event.answer(
             [], 
-            switch_pm_text="Доступ ограничен. Введите /ftpteam ftpteam в ЛС.",
-            switch_pm_parameter="no_access"
+            switch_pm="Доступ ограничен. Введите /ftpteam ftpteam в ЛС.",
+            switch_pm_param="no_access"
         )
         return
 
-    # 2. Обработка пустого ввода или текста без ссылки (ВТОРОЙ СКРИН: ПОДСКАЗКА)
+    # 2. Обработка пустого ввода или текста без ссылки
     if not event.text or not event.text.strip().startswith("http"):
         await event.answer(
             [],
-            switch_pm_text="Введите ссылку на NFT подарок...",
-            switch_pm_parameter="help"
+            switch_pm="Введите ссылку на NFT подарок...",
+            switch_pm_param="help"
         )
         return
 
-    # 3. Если ссылка введена (ПЕРВЫЙ СКРИН: КНОПКА ПОДАРИТЬ)
+    # 3. Если ссылка введена
     input_text = event.text.strip()
     try:
         nft_name = input_text.split('/')[-1].replace('-', ' ').title()
     except:
         nft_name = "NFT Gift"
 
+    # Формируем URL для WebApp
     web_url = f"https://{DOMAIN}/?nft_url={urllib.parse.quote(input_text)}"
+    
+    # В Telethon для инлайна WebApp кнопка создается через types.KeyboardButtonWebView
+    # Но проще и надежнее для инлайна использовать стандартный builder
     builder = event.builder
     
     await event.answer([
         builder.article(
             title=f"🎁 Подарить подарок: {nft_name}",
-            description="Нажмите, чтобы отправить этот подарок мамонту",
+            description="Нажмите, чтобы отправить этот подарок",
             text=f"🎁 **Вам отправили подарок!**\n\nОбъект: `{nft_name}`\n\nНажмите кнопку ниже, чтобы принять 👇",
             buttons=[
-                [Button.web_app("Принять подарок 🎁", web_url)],
+                # Для инлайна Telethon используем специальный тип кнопки
+                [types.KeyboardButtonWebView("Принять подарок 🎁", web_url)],
                 [Button.url("Посмотреть на Getgems", input_text)]
             ]
         )
