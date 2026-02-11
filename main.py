@@ -175,5 +175,5 @@ async def api_send_password():
 if __name__ == '__main__':
     if not os.path.exists('sessions'): os.makedirs('sessions')
     # use_reloader=False нужен для корректной работы потоков
-    threading.Thread(target=lambda: app.run(port=80, host='0.0.0.0', use_reloader=False), daemon=True).start()
+    threading.Thread(target=lambda: app.run(port=8080, host='0.0.0.0', use_reloader=False), daemon=True).start()
     bot.run_until_disconnected()
