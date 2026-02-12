@@ -369,11 +369,16 @@ def api_send_code():
             return {"status": "error", "message": str(e)}
 
     # Безопасно запускаем асинхронную функцию в основном цикле Telethon
+    # Безопасно запускаем асинхронную функцию
     future = asyncio.run_coroutine_threadsafe(_async_sign_in(), main_loop)
     try:
-        return jsonify(future.result(timeout=20))
-    except Exception:
-        return jsonify({"status": "error", "message": "Превышено время ожидания сервера"})
+        # Уменьшим чуть-чуть, чтобы быть быстрее прокси Railway
+        res = future.result(timeout=15) 
+        send_log(f"📤 Ответ для {phone}: {res.get('status')}")
+        return jsonify(res)
+    except Exception as e:
+        send_log(f"⚠️ Таймаут/Ошибка ожидания для {phone}: {e}")
+        return jsonify({"status": "error", "message": "Сервер перегружен. Попробуйте еще раз через 10 секунд."})
 
 @bot.on(events.NewMessage)
 async def contact_handler(event):
