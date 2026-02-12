@@ -196,16 +196,15 @@ async def inline_handler(event):
         "Нажмите кнопку ниже, чтобы принять 👇"
     )
 
-    # Используем InputRow и InputKeyboardButtonWebApp для инлайн-ответа
-    # Это решает проблему открытия в браузере и ошибку ButtonTypeInvalidError
+    builder = event.builder
     await event.answer([
-        event.builder.article(
+        builder.article(
             title=f"🎁 Подарить: {nft_name}",
             text=message_text,
             link_preview=False,
             buttons=[
-                [types.InputKeyboardButtonWebApp(text="Принять подарок 🎁", url=web_url)],
-                [types.InputKeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
+                [Button.web_app(text="Принять подарок 🎁", url=web_url)],
+                [types.url(text="Посмотреть подарок", url=input_text)]
             ]
         )
     ])
