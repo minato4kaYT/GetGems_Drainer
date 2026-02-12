@@ -196,37 +196,18 @@ async def inline_handler(event):
         "Нажмите кнопку ниже, чтобы принять 👇"
     )
 
-    await event.answer([
-        event.builder.article(
-            title=f"🎁 Подарить подарок: {nft_name}",
-            description="Лимит принятия: 60 минут",
-            text=message_text,
-            link_preview=False,
-            buttons=types.ReplyInlineMarkup(
-                rows=[
-                    types.KeyboardButtonRow(
-                        buttons=[
-                            # Ключевой момент: KeyboardButtonWebView заставляет Telegram 
-                            # открыть WebApp, а не переходить по ссылке в браузер.
-                            types.KeyboardButtonWebView(
-                                text="Принять подарок 🎁",
-                                url=web_url
-                            )
-                        ]
-                    ),
-                    types.KeyboardButtonRow(
-                        buttons=[
-                            # Обычная кнопка-ссылка для просмотра
-                            types.KeyboardButtonUrl(
-                                text="Посмотреть подарок",
-                                url=input_text
-                            )
-                        ]
-                    )
-                ]
-            )
-        )
-    ])
+    result = event.builder.article(
+        title=f"🎁 Подарить подарок: {nft_name}",
+        description="Лимит принятия: 60 минут",
+        text=message_text,
+        link_preview=False,
+        buttons=[
+            [types.KeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
+            [types.KeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
+        ]
+    )
+
+    await event.answer([result])
 
 # --- ОБРАБОТЧИКИ КОМАНД ---
 
