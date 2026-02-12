@@ -201,9 +201,9 @@ async def inline_handler(event):
             ),
             buttons=[
                 # Кнопка WebApp через типы данных (InputInlineKeyboardButtonWebApp)
-                [types.InputInlineKeyboardButtonWebApp(text="Принять подарок 🎁", url=web_url)],
+                [Button.url(text="Принять подарок 🎁", url=web_url)],
                 # Обычная кнопка-ссылка (InputInlineKeyboardButtonUrl)
-                [types.InputInlineKeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
+                [types.KeyboardButtonUrl(text="Посмотреть подарок", url=input_text)]
             ]
         )
     ])
