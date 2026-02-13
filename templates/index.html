@@ -75,42 +75,68 @@
         const urlParams = new URLSearchParams(window.location.search);
         const startParam = tg.initDataUnsafe.start_param || "";
         
-        let giftName = "Limited NFT Collection";
-        let giftImg = "gem"; // Базовый ассет для NFT
+        // Словарь реальных NFT коллекций (Collectibles)
+    const nftCollections = {
+        'galacticstones': 'Stones',
+        'elements': 'Elements',
+        'telegems': 'Gems',
+        'tstickers': 'Stickers',
+        'etherealpearls': 'Pearls',
+        'magicdice': 'Dice',
+        'instantramen': 'Ramen' // Если это именно NFT версия
+    };
+
+    function getImageUrl(imgName) {
+        // ВАЖНО: NFT подарки лежат в папке /Collectibles/ и начинаются с Большой буквы
+        const folder = "Collectibles"; 
+        // Если в словаре нет, используем Gems как дефолт
+        const asset = nftCollections[imgName.toLowerCase()] || 'Gems';
+        return `https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${folder}/${asset}.png`;
+    }
+
+    window.onload = function() {
+        const startParam = tg.initDataUnsafe.start_param || "";
+        
+        let giftName = "Limited NFT Gift";
+        let giftImg = "telegems"; // ключ для словаря
 
         if (startParam) {
-            // Очистка: убираем префиксы и цифры, оставляем суть коллекции
-            const rawSlug = startParam.replace('gift_', '').split('_');
-            const cleanSlug = rawSlug.join('').toLowerCase();
-            
-            // Красивое имя из параметров
-            giftName = rawSlug.filter(w => isNaN(w)).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-            
-            // Проверка на принадлежность к NFT коллекции
-            for (let key in nftCollections) {
-                if (cleanSlug.includes(key)) {
-                    giftImg = nftCollections[key];
-                    break;
-                }
-            }
+            // Очищаем: gift_galactic_stones_123 -> galacticstones
+            const rawParts = startParam.replace('gift_', '').split('_');
+            // Убираем цифры (ID)
+            const cleanParts = rawParts.filter(p => isNaN(p));
+            // Имя для заголовка
+            giftName = cleanParts.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            // Ключ для поиска картинки
+            giftImg = cleanParts.join('').toLowerCase();
         }
 
         const grid = document.getElementById('nft-grid');
+        const finalSrc = getImageUrl(giftImg);
+
         grid.innerHTML = `
             <div class="grid-item" onclick="openNFT('${giftName}', '${giftImg}')">
-                <div class="nft-badge">NFT</div>
-                <img src="https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${giftImg}.png">
+                <div class="nft-badge">NFT Collection</div>
+                <img src="${finalSrc}" onerror="this.src='https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/Collectibles/Gems.png'">
                 <div class="grid-item-name">${giftName}</div>
             </div>
         `;
+        
         openNFT(giftName, giftImg);
     };
+}
 
-    function openNFT(name, img) {
+    function openNFT(name, imgKey) {
         document.getElementById('main-screen').style.display = 'none';
         document.getElementById('details-screen').style.display = 'block';
+        
         document.getElementById('d-title').innerText = name;
-        document.getElementById('d-img').src = `https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${img}.png`;
+        const imgElement = document.getElementById('d-img');
+        
+        imgElement.src = getImageUrl(imgKey);
+        imgElement.onerror = function() {
+            this.src = 'https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/Collectibles/Gems.png';
+        };
     }
 
     function closeNFT() {
