@@ -5,32 +5,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no,viewport-fit=cover">
     <title>Getgems: купить и продать подарки</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        :root { --bg: #000; --card: #111; --accent: #007aff; --text: #fff; --gray: #8e8e93; --border: rgba(255,255,255,0.08); }
-        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
-        .top-nav { display: flex; padding: 8px 16px; gap: 20px; border-bottom: 0.5px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 10; }
-        .nav-item { font-size: 14px; font-weight: 600; color: var(--gray); padding: 8px 0; }
-        .nav-item.active { color: var(--text); border-bottom: 2px solid var(--text); }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
-        .grid-item { background: var(--card); border-radius: 16px; padding: 12px; border: 0.5px solid var(--border); transition: 0.2s; text-align: center; }
-        .grid-item:active { transform: scale(0.96); }
-        .grid-item img { width: 85%; aspect-ratio: 1; object-fit: contain; }
-        .grid-item-name { font-size: 14px; font-weight: 600; margin-top: 8px; }
-        #details-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 20; padding: 16px; overflow-y: auto; }
-        .back { color: var(--accent); font-weight: 500; margin-bottom: 20px; display: block; cursor: pointer; }
-        .nft-hero { width: 100%; aspect-ratio: 1; background: radial-gradient(circle, #1c1c1e 0%, #000 100%); border-radius: 24px; display: flex; align-items: center; justify-content: center; border: 0.5px solid var(--border); margin-bottom: 20px; }
-        .nft-hero img { width: 70%; }
-        .btn-stack { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
-        .btn { padding: 18px; border-radius: 16px; font-size: 16px; font-weight: 600; border: none; text-align: center; cursor: pointer; }
-        .btn-blue { background: var(--accent); color: #fff; }
-        .btn-dark { background: #1c1c1e; color: #fff; border: 0.5px solid var(--border); }
-        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px); }
-        .modal { background: #1c1c1e; width: 100%; max-width: 320px; border-radius: 30px; padding: 30px; text-align: center; }
-        .input-f { width: 100%; padding: 16px; margin: 15px 0; background: #000; border: 1px solid #333; border-radius: 12px; color: #fff; font-size: 24px; text-align: center; outline: none; box-sizing: border-box; }
-        .spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 15px; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
 </head>
 <body>
 
